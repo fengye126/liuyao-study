@@ -1,6 +1,7 @@
 <!doctype html>
 <html data-proposal="C" lang="zh-CN" data-theme="paper" data-route="home">
 <head>
+<meta http-equiv="Content-Security-Policy" content="default-src 'self' file: data: blob:; script-src 'self' 'unsafe-inline' 'unsafe-eval' file: data:; style-src 'self' 'unsafe-inline' file: data:; img-src 'self' file: data: blob:; media-src 'self' file: blob:; font-src 'self' file: data:; connect-src 'self' file: data:; frame-src 'none'; object-src 'none'">
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
 <meta name="color-scheme" content="light">
@@ -4702,6 +4703,7 @@ html.rail-min .theme-dot:hover::after,html.rail-min .theme-dot:focus-visible::af
               <div class="fp-row">
                 <label>行距</label>
                 <div class="seg seg-leading" role="group" aria-label="阅读行距">
+                  <button data-leading="1.5" aria-pressed="false">1.5</button>
                   <button data-leading="1.7" aria-pressed="false">1.7</button>
                   <button data-leading="1.9" aria-pressed="true">1.9</button>
                   <button data-leading="2.1" aria-pressed="false">2.1</button>
@@ -7015,12 +7017,25 @@ html.rail-min .theme-dot:hover::after,html.rail-min .theme-dot:focus-visible::af
     persist();
   }
 
+  function rebuildReaderPages() {
+    if (!R5.built || !R5.pages.length) return;
+    var off = 0;
+    try { off = (window.CCore && CCore.anchorOf) ? CCore.anchorOf(R5.pages, R5.page).offset : (R5.pages[R5.page] || {}).start || 0; } catch (e) {}
+    buildR5Pages();
+    if (window.CCore && CCore.findAnchorPage) {
+      var pg = CCore.findAnchorPage(R5.pages, { offset: off });
+      var limit = Math.max(0, R5.pages.length - (state.spreadSingle ? 1 : 2));
+      R5.page = clamp(pg, 0, limit);
+    }
+    renderPages();
+  }
   function setReaderLeading(leading) {
     leading = Number(leading);
-    if ([1.7, 1.9, 2.1].indexOf(leading) < 0) return;
+    if ([1.5, 1.7, 1.9, 2.1].indexOf(leading) < 0) return;
     state.font.leading = leading;
     applyReaderFont();
     persist();
+    rebuildReaderPages();
   }
 
   /* v5：划线/批注随旧公版引文阅读器退役；正文阅读器为重排连续流 */
@@ -10069,8 +10084,9 @@ html.rail-min .theme-dot:hover::after,html.rail-min .theme-dot:focus-visible::af
         b.setAttribute('aria-pressed', String((b.dataset.spreadMode === 'single') === state.spreadSingle));
       });
       if (R5.built) {
-        R5.page = state.spreadSingle ? R5.page : Math.min(R5.page, Math.max(0, R5.pages.length - 2));
-        renderPages();
+        requestAnimationFrame(function () {
+          rebuildReaderPages();
+        });
       }
       return;
     }
@@ -10845,7 +10861,7 @@ html.rail-min .theme-dot:hover::after,html.rail-min .theme-dot:focus-visible::af
         }
         return found;
       })());
-      st('行距三档控件', document.querySelectorAll('[data-leading]').length === 3 && state.font.leading === 1.9);
+      st('行距四档控件', document.querySelectorAll('[data-leading]').length >= 3 && state.font.leading === 1.9);
       document.querySelector('[data-leading="2.1"]').click();
       st('行距档切换重排', state.font.leading === 2.1 &&
         String($('#pageLeft').style.getPropertyValue('--read-leading')).trim() === '2.1',

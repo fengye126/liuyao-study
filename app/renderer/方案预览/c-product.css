@@ -141,3 +141,6 @@ html[data-theme="jade"] .bv6-tag.sys-古籍{color:#D9BE7A;border-color:rgba(217,
 .c-note-group h3{display:flex;align-items:center;gap:8px;font:12px/1.8 var(--font-ui);letter-spacing:.1em;color:var(--ink-2);margin:14px 0 8px;font-weight:400}
 .c-note-group h3 span{font-family:var(--font-mono);color:var(--ink-3);font-size:10px}
 .c-note-group:first-child h3{margin-top:2px}
+
+/* 单页模式页宽锁定（原规则在部分布局下未生效） */
+.book-spread.is-single{max-width:720px !important;width:min(720px,100%) !important;margin:0 auto}

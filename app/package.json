@@ -7,7 +7,8 @@
   "main": "main.js",
   "scripts": {
     "start": "electron .",
-    "dist": "electron-builder --win nsis"
+    "dist": "electron-builder --win nsis",
+    "check": "python ../tools/check/run.py"
   },
   "devDependencies": {
     "electron": "^38.0.0",
@@ -24,7 +25,10 @@
       "main.js",
       "preload.js",
       "lan.js",
-      "renderer/**"
+      "renderer/**",
+      "!renderer/方案预览/A.css",
+      "!renderer/方案预览/B.css",
+      "!renderer/方案预览/capture-c.mjs"
     ],
     "win": {
       "target": [

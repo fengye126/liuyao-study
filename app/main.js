@@ -140,6 +140,22 @@ function findDataFiles(root) {
   return found;
 }
 
+const DATA_GLOBALS = {
+  'books.js': 'window.BOOKS_TEXT',
+  'library.js': 'window.LIUYAO_LIBRARY',
+  'media.js': 'window.MEDIA',
+  'lessons-manifest.js': 'window.LESSONS',
+  'almanac.js': 'window.ALMANAC'
+};
+function checkDataFile(file, name) {
+  const stat = fs.statSync(file);
+  if (stat.size > 120 * 1024 * 1024) return '文件超过 120MB';
+  const head = fs.readFileSync(file, { encoding: 'utf8', flag: 'r' }).slice(0, 400000);
+  const globalName = DATA_GLOBALS[name];
+  if (globalName && !head.includes(globalName)) return '缺少 ' + globalName + ' 定义（不是本应用的资料文件）';
+  if (name === 'library.js' && !/"books"\s*:/.test(head)) return '书库结构不完整';
+  return '';
+}
 async function importData(win) {
   const res = await dialog.showOpenDialog(win, {
     title: '选择资料目录（含 books.js 的 data 文件夹或其上一级）', properties: ['openDirectory']
@@ -150,8 +166,27 @@ async function importData(win) {
     dialog.showMessageBox(win, { type: 'warning', title: '导入资料', message: '这个目录里没找到 books.js', detail: '请选择项目里的 09_原型\\data 文件夹（或它的上一级）。' });
     return { ok: false, reason: 'no-books' };
   }
+  const bad = [];
+  for (const name of DATA_FILES) {
+    if (!found[name]) continue;
+    const err = checkDataFile(found[name], name);
+    if (err) bad.push(name + '：' + err);
+  }
+  if (bad.length) {
+    dialog.showMessageBox(win, { type: 'error', title: '导入资料', message: '资料文件校验没通过，未导入任何文件', detail: bad.join('\n') });
+    return { ok: false, reason: 'invalid', detail: bad };
+  }
   fs.mkdirSync(USER_DATA, { recursive: true });
-  for (const name of DATA_FILES) if (found[name]) fs.copyFileSync(found[name], path.join(USER_DATA, name));
+  try { backupData(); } catch (e) {}
+  const tmp = [];
+  for (const name of DATA_FILES) {
+    if (!found[name]) continue;
+    const dst = path.join(USER_DATA, name);
+    const t = dst + '.importing';
+    fs.copyFileSync(found[name], t);
+    tmp.push([t, dst]);
+  }
+  for (const [t, dst] of tmp) fs.renameSync(t, dst);
   if (win) win.webContents.reload();
   return { ok: true, imported: importedStatus() };
 }

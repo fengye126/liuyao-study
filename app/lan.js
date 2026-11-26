@@ -11,10 +11,31 @@ const MIME = {
   '.m4a': 'audio/mp4', '.mp4': 'video/mp4', '.pdf': 'application/pdf', '.svg': 'image/svg+xml', '.txt': 'text/plain; charset=utf-8'
 };
 
-function lanBootScript() {
+const MEDIA_EXT = new Set(['.mp3', '.m4a', '.wav', '.ogg', '.flac', '.aac', '.mp4', '.webm', '.mov', '.m4v',
+  '.jpg', '.jpeg', '.png', '.gif', '.webp', '.pdf', '.bmp']);
+
+function mediaRootsOf(dataDir, userData) {
+  const roots = new Set();
+  const files = [
+    path.join(dataDir, 'media.js'), path.join(userData, 'media.js'),
+    path.join(dataDir, 'lessons-manifest.js'), path.join(userData, 'lessons-manifest.js')
+  ];
+  for (const f of files) {
+    let text = '';
+    try { text = fs.readFileSync(f, 'utf8'); } catch (e) { continue; }
+    const re = /file:\/\/\/([^"'\\<>]+)/g;
+    let m;
+    while ((m = re.exec(text))) {
+      try { roots.add(path.dirname(path.resolve(decodeURIComponent(m[1])))); } catch (e) {}
+    }
+  }
+  return [...roots];
+}
+
+function lanBootScript(token) {
   return `<script>(function(){
-window.__LAN_MODE=1;window.__LAN_READONLY=1;
-function rw(u){if(typeof u!=='string')return u;if(u.indexOf('file:///')!==0)return u;return '/media?src='+encodeURIComponent(u)}
+window.__LAN_MODE=1;window.__LAN_READONLY=1;var TK='${token || ''}';
+var TK='';function rw(u){if(typeof u!=='string')return u;if(u.indexOf('file:///')!==0)return u;return '/media?src='+encodeURIComponent(u)+'\u0026k='+TK}
 function wrap(name){var store;try{Object.defineProperty(window,name,{configurable:true,get:function(){return store},set:function(v){
   try{if(name==='MEDIA'&&v&&v.audio){v.audio.forEach(function(g){g.items.forEach(function(it){it.path=rw(it.path)})})}
   if(name==='MEDIA'&&v&&v.images){v.images.forEach(function(it){it.path=rw(it.path)})}
@@ -33,7 +54,7 @@ document.addEventListener('DOMContentLoaded',function(){setTimeout(function(){
 }
 
 function makeHandler(opts) {
-  const { renderer, userData, dataDir, version } = opts;
+  const { renderer, userData, dataDir, version, token } = opts;
   const root = path.resolve(renderer);
   const userRoot = path.resolve(userData);
   const dataRoot = path.resolve(dataDir);
@@ -41,6 +62,8 @@ function makeHandler(opts) {
     let rel = decodeURIComponent(urlPath).replace(/^\/+/, '');
     if (!rel) rel = 'index.html';
     const isData = rel.startsWith('data/');
+    const DATA_ALLOW = new Set(['books.js', 'media.js', 'library.js', 'almanac.js', 'lessons-manifest.js']);
+    if (isData && !DATA_ALLOW.has(path.basename(rel))) { res.writeHead(403); return res.end('forbidden'); }
     let file = path.resolve(root, rel);
     if (isData) {
       const imported = path.resolve(userRoot, path.basename(rel));
@@ -56,16 +79,25 @@ function makeHandler(opts) {
       const ext = path.extname(file).toLowerCase();
       const headers = { 'Content-Type': MIME[ext] || 'application/octet-stream', 'Cache-Control': 'no-store' };
       if (ext === '.html') {
-        let html = buf.toString('utf8').replace('</head>', lanBootScript() + '</head>');
+        let html = buf.toString('utf8').replace('</head>', lanBootScript(token) + '</head>');
         res.writeHead(200, headers); return res.end(html);
       }
       res.writeHead(200, headers); res.end(buf);
     });
   }
+  const MEDIA_ROOTS = mediaRootsOf(dataDir, userData);
+  function mediaAllowed(file) {
+    const abs = path.resolve(file);
+    const ext = path.extname(abs).toLowerCase();
+    if (!MEDIA_EXT.has(ext)) return false;
+    return MEDIA_ROOTS.some((r) => abs === r || abs.startsWith(r + path.sep));
+  }
   function streamMedia(req, res, q) {
+    if (token && q.get('k') !== token) { res.writeHead(403); return res.end('bad token'); }
     const src = q.get('src') || '';
     if (!src.startsWith('file:///')) { res.writeHead(400); return res.end('bad src'); }
     const file = decodeURIComponent(src.replace(/^file:\/\/\//, ''));
+    if (!mediaAllowed(file)) { res.writeHead(403); return res.end('forbidden'); }
     let stat;
     try { stat = fs.statSync(file); } catch (e) { res.writeHead(404); return res.end('missing'); }
     const ext = path.extname(file).toLowerCase();
@@ -110,13 +142,14 @@ function lanIPs() {
 }
 
 function start(opts) {
-  const server = http.createServer(makeHandler(opts));
+  const token = opts.token || require('crypto').randomBytes(4).toString('hex');
+  const server = http.createServer(makeHandler(Object.assign({}, opts, { token })));
   return new Promise((resolve) => {
     const tryPort = (i) => {
       const ports = [51888, 51889, 51890, 0];
       const port = ports[i];
       const onError = () => { server.removeListener('listening', onOk); tryPort(i + 1); };
-      const onOk = () => { server.removeListener('error', onError); resolve({ server, port: server.address().port }); };
+      const onOk = () => { server.removeListener('error', onError); resolve({ server, port: server.address().port, token }); };
       server.once('error', onError);
       server.once('listening', onOk);
       server.listen(port, '0.0.0.0');
