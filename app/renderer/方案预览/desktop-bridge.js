@@ -114,15 +114,38 @@
     }
   }
 
-  desktop.info().then(function (info) {
-    var v = info && info.version ? info.version : '';
-    if (v) {
-      setStatus('当前版本 v' + v + ' · 点击「检查更新」查看是否有新版');
-      document.querySelectorAll('body *').forEach(function (n) {
-        if (n.children.length === 0 && n.textContent && /^App\s*v?[\d.]+\s*$/i.test(n.textContent.trim())) n.textContent = 'App v' + v;
-      });
+  /* 界面里的版本号占位（v0.1.0）统一改成真实版本：文本节点级替换，
+     覆盖「App v0.1.0」「本机存储 · 版本 v0.1.0」「已是最新版本 v0.1.0」等写法。 */
+  var APP_VER = '';
+  function rewriteVersions() {
+    if (!APP_VER) return;
+    var walker = document.createTreeWalker(document.body, NodeFilter.SHOW_TEXT);
+    var hits = [];
+    while (walker.nextNode()) {
+      var n = walker.currentNode;
+      if (!n.nodeValue || n.nodeValue.indexOf('0.1.0') < 0) continue;
+      var p = n.parentElement;
+      if (!p || p.closest('script,style,textarea')) continue;
+      if ((p.textContent || '').length > 160) continue;
+      hits.push(n);
     }
-    document.documentElement.setAttribute('data-desktop-version', v);
+    hits.forEach(function (n) {
+      n.nodeValue = n.nodeValue.replace(/v?0\.1\.0/g, function (m) {
+        return m.charAt(0) === 'v' ? 'v' + APP_VER : APP_VER;
+      });
+    });
+  }
+  var verTimer = 0;
+  function scheduleVersionFix() { clearTimeout(verTimer); verTimer = setTimeout(rewriteVersions, 120); }
+
+  desktop.info().then(function (info) {
+    APP_VER = info && info.version ? info.version : '';
+    if (APP_VER) {
+      setStatus('当前版本 v' + APP_VER + ' · 点击「检查更新」查看是否有新版');
+      rewriteVersions();
+      try { new MutationObserver(scheduleVersionFix).observe(document.body, { childList: true, subtree: true }); } catch (e) {}
+    }
+    document.documentElement.setAttribute('data-desktop-version', APP_VER);
     setTimeout(mountCards, 900);
     setTimeout(markMissingBooks, 1600);
   }).catch(function () {});
