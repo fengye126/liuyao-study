@@ -133,19 +133,45 @@ window.CCore = (() => {
     return {cpl,lines,lineH:lh,contentH,cpp:cpl*lines};
   }
   function paginate(text,m,isHead,nameMap){
-    const pages=[],toc=[];let cur=[],curIndex=[],heads=[],used=0,cursor=0,start=0;
-    const flush=()=>{if(cur.length)pages.push({paras:cur,heads,start,end:cursor,indexOnly:curIndex.length>0&&curIndex.every(Boolean)});cur=[];curIndex=[];heads=[];used=0;start=cursor};
+    const pages=[],toc=[];let cur=[],curIndex=[],heads=[],used=0,cursor=0,start=0,flow=[];
+    const flush=()=>{
+      if(cur.length||flow.length){
+        pages.push({paras:cur.slice(),flow:flow.slice(),heads:heads.slice(),start,end:cursor,
+          indexOnly:curIndex.length>0&&curIndex.every(Boolean)});
+      }
+      cur=[];curIndex=[];heads=[];used=0;start=cursor;flow=[];
+    };
     for(const block of blocks(text,nameMap)){
-      if(block.chart){flush();validateChart(block.chart,nameMap);if(pages.length%2)pages.push({paras:[],heads:[],start:cursor,end:cursor});const a=cursor;cursor+=block.chart.rows.map(r=>r.raw||r.ben+r.bian).join('').length+(block.chart.title||'').length;pages.push({chart:block.chart,paras:[],heads:[],start:a,end:cursor},{continuation:true,paras:[],heads:[],start:a,end:cursor});start=cursor;continue;}
+      if(block.chart){
+        validateChart(block.chart,nameMap);
+        /* 卦表按行高估算：标题+干支+6 行 + 段距 */
+        const needLines=1+(block.chart.meta?1:0)+block.chart.rows.length+1.2;
+        if(used>0&&used+needLines>m.lines-1)flush();
+        if(!start)start=cursor;
+        flow.push({t:'chart',c:block.chart});
+        used+=needLines;
+        cursor+=block.chart.rows.map(r=>r.raw||r.ben+r.bian).join('').length+(block.chart.title||'').length+(block.chart.meta||'').length;
+        continue;
+      }
       const lines=block.text.split('\n').map(s=>s.trim()),indexSlots=new Set();let run=[];
       const finishRun=()=>{if(run.filter(i=>isHead(lines[i])).length>=4)run.forEach(i=>indexSlots.add(i));run=[];};
-      lines.forEach((line,i)=>{if(!line)return;if(isHead(line)||/^第[一二三四五六七八九十\d]+册[：:]?/.test(line)||/^\d{1,4}$/.test(line))run.push(i);else finishRun();});finishRun();
-      const joined=[];lines.forEach((line,i)=>{const prev=joined.at(-1);if(line&&prev&&prev.text.length>=18&&!/[。！？：；!?]$/.test(prev.text)&&!isHead(prev.text)&&!isHead(line))prev.text+=line;else if(line)joined.push({text:line,index:indexSlots.has(i)})});
-      for(const token of joined){let p=token.text;const h=isHead(p);if(h){if(m.lines-used<3)flush();if(!token.index)toc.push({label:p,page:pages.length,offset:cursor});heads.push(p)}
-        while(p.length){let available=Math.floor(m.lines-used-.5);if(available<1){flush();available=m.lines;}const chunk=p.slice(0,available*m.cpl);if(!cur.length)start=cursor;cur.push(chunk);curIndex.push(token.index);cursor+=chunk.length;used+=Math.ceil(chunk.length/m.cpl)+.55;p=p.slice(chunk.length);if(p.length)flush();}
+      lines.forEach((line,i)=>{if(!line)return;if(isHead(line)||/^第[一二三四五六七八九十\d]+[章回节卷篇讲]/.test(line)||/^\d{1,4}$/.test(line))run.push(i);else finishRun();});finishRun();
+      const joined=[];lines.forEach((line,i)=>{const prev=joined.at(-1);if(line&&prev&&prev.text.length>=18&&!/[。！？：；\?]$/.test(prev.text)&&!isHead(prev.text)&&!isHead(line))prev.text+=line;else if(line)joined.push({text:line,index:indexSlots.has(i)})});
+      for(const token of joined){
+        let p2=token.text;const h=isHead(p2);
+        if(h){if(m.lines-used<3)flush();if(!token.index)toc.push({label:p2,page:pages.length,offset:cursor});heads.push(p2);}
+        while(p2.length){
+          let available=Math.floor(m.lines-used-.5);if(available<1){flush();available=m.lines;}
+          const chunk=p2.slice(0,available*m.cpl);
+          if(!start)start=cursor;
+          cur.push(chunk);curIndex.push(token.index);flow.push({t:'text',s:chunk});
+          cursor+=chunk.length;used+=Math.ceil(chunk.length/m.cpl)+.55;p2=p2.slice(chunk.length);
+          if(p2.length)flush();
+        }
       }
     }
-    flush();return {pages,toc};
+    flush();
+    return {pages,toc};
   }
   function chartHTML(c){
     const line=yin=>`<span class="bc-yao${yin?' yin':''}" aria-label="${yin?'阴爻':'阳爻'}"></span>`;
@@ -155,13 +181,11 @@ window.CCore = (() => {
   }
   function chartPage(pages,index,spread){
     spread.dataset.page=String(index);
-    spread.dataset.anchorStart=String(pages[index]?.start||0);spread.dataset.anchorEnd=String(pages[index]?.end||0);
-    const c=pages[index]?.chart||(pages[index]?.continuation?pages[index-1]?.chart:null);
-    spread.classList.toggle('is-chart',!!c);spread.querySelector('.book-chart')?.remove();
-    if(!c)return false;
-    const el=document.createElement('article');el.className='book-chart';el.setAttribute('aria-label','书中本变卦');el.innerHTML=`<div class="book-chart-pan">${chartHTML(c)}</div>`;spread.append(el);
-    el.firstElementChild.dataset.fit='1';
-    return true;
+    spread.dataset.anchorStart=String(pages[index]?.start||0);
+    spread.dataset.anchorEnd=String(pages[index]?.end||0);
+    const hasChart=!!(pages[index]?.flow||[]).some(f=>f.t==='chart');
+    spread.classList.toggle('has-inline-chart',hasChart);
+    return hasChart;
   }
   function nextPage(pages,current,dir,single){let n=Math.max(0,Math.min(pages.length-(single?1:2),current+dir*(single?1:2)));if(single&&pages[n]?.continuation)n+=dir;return Math.max(0,Math.min(pages.length-1,n));}
   function anchorOf(pages,index){const p=pages[index];return {offset:p?.start||0,quote:(p?.chart?.rows.map(r=>r.raw).join('')||p?.paras?.join('')||'').slice(0,36),chart:!!p?.chart};}
