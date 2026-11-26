@@ -6877,9 +6877,7 @@ html.rail-min .theme-dot:hover::after,html.rail-min .theme-dot:focus-visible::af
     var p0 = R5.pages[Math.min(R5.page, Math.max(0, n - 1))] || { paras: [], heads: [] };
     var p1 = R5.pages[Math.min(R5.page + 1, Math.max(0, n - 1))] || { paras: [], heads: [] };
     var single = state.spreadSingle;
-    if (CCore.chartPage(R5.pages, R5.page, $('#bookSpread'))) {
-      updateReaderProgress(); renderReaderToc(); if(window.CStudy)CStudy.afterReader(); return;
-    }
+    CCore.chartPage(R5.pages, R5.page, $('#bookSpread'));
     var fontCss = readerFontOf();
     /* v6.1 P0 修复：正文包进 .pg-body，让 --read-font/--read-size/--read-leading 真正命中 */
     var style = '--read-font:' + fontCss + ';--read-leading:' + (Number(state.font.leading) || 1.9) + ';--read-size:' + state.font.size + 'px;';
@@ -7054,6 +7052,12 @@ html.rail-min .theme-dot:hover::after,html.rail-min .theme-dot:focus-visible::af
   }
   var readerOriginEl = null;
   function openReader(kind, id, originEl) {
+    try {
+      var _it = null;
+      if (kind === 'book') { for (var _b of BOOKS) { if (_b.id === id) { _it = _b; break; } } }
+      var _txt = _it && _it.text ? _it.text.length : 0;
+      if (_txt > 300000 && CUI && CUI.toast) CUI.toast('正在排版这本（' + Math.round(_txt / 10000) + ' 万字，约几秒）');
+    } catch (e) {}
     if (kind === 'note') {
       var note = findNote(id) || NOTES[0];
       state.reader = { kind: 'note', id: note ? note.id : '' };
