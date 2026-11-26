@@ -1,14 +1,13 @@
 {
   "name": "liuyao-shufang",
-  "version": "0.5.1",
+  "version": "0.5.2",
   "private": true,
   "description": "六爻书房 · 本地六爻学习与排盘工作台",
   "author": "易寒",
   "main": "main.js",
   "scripts": {
     "start": "electron .",
-    "dist": "electron-builder --win nsis",
-    "check": "python ../tools/check/run.py"
+    "dist": "electron-builder --win nsis"
   },
   "devDependencies": {
     "electron": "^38.0.0",
