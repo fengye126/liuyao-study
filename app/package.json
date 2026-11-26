@@ -1,0 +1,53 @@
+{
+  "name": "liuyao-shufang",
+  "version": "0.4.0",
+  "private": true,
+  "description": "六爻书房 · 本地六爻学习与排盘工作台",
+  "author": "易寒",
+  "main": "main.js",
+  "scripts": {
+    "start": "electron .",
+    "dist": "electron-builder --win nsis"
+  },
+  "devDependencies": {
+    "electron": "^38.0.0",
+    "electron-builder": "^26.0.12"
+  },
+  "build": {
+    "appId": "com.liuyao.shufang",
+    "productName": "六爻书房",
+    "asar": true,
+    "directories": {
+      "output": "dist"
+    },
+    "files": [
+      "main.js",
+      "preload.js",
+      "lan.js",
+      "renderer/**"
+    ],
+    "win": {
+      "target": [
+        "nsis"
+      ],
+      "artifactName": "liuyao-shufang-${version}-setup.${ext}",
+      "icon": "build/icon.ico"
+    },
+    "nsis": {
+      "oneClick": false,
+      "allowToChangeInstallationDirectory": true,
+      "createDesktopShortcut": true,
+      "shortcutName": "六爻书房"
+    },
+    "publish": [
+      {
+        "provider": "github",
+        "owner": "fengye126",
+        "repo": "liuyao-study"
+      }
+    ]
+  },
+  "dependencies": {
+    "qrcode": "^1.5.4"
+  }
+}

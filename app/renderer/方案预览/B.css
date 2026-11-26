@@ -1,0 +1,22 @@
+/* B · 观象仪台: centered compass with a compact command dock. */
+html[data-proposal="B"][data-theme="paper"]{--accent:#284f61;--accent-strong:#173b4f;--accent-soft:#8faab1;--accent-wash:#e4eff0}
+html[data-proposal="B"] .home-desk{
+  grid-template-columns:minmax(0,1fr) minmax(540px,690px) minmax(0,1fr);
+  grid-template-areas:"p1 wheel p2" "almanac almanac almanac";
+  gap:18px 22px;align-items:center;max-width:1720px;margin:auto
+}
+html[data-proposal="B"] .wheel-wrap{max-width:690px;justify-self:center}
+html[data-proposal="B"] .hp-col:first-child{grid-area:p1}
+html[data-proposal="B"] .hp-col:last-child{grid-area:p2}
+html[data-proposal="B"] .home-reading{order:-1;min-height:190px;justify-content:center}
+html[data-proposal="B"] .home-reading .hr-book{font-family:var(--font-title);font-size:23px}
+html[data-proposal="B"] .home-cast-cta{min-height:118px}
+html[data-proposal="B"] .home-panel{min-height:145px}
+html[data-proposal="B"] .almanac-card{width:min(100%,1000px);justify-self:center;display:flex;gap:22px;align-items:center}
+html[data-proposal="B"] .almanac-card .ac-cols{flex:1;margin:0}
+html[data-proposal="B"] .bv6-grid{grid-template-columns:repeat(5,minmax(0,1fr));gap:20px}
+html[data-proposal="B"] .plate-v6{box-shadow:inset 0 1px 0 var(--line-strong),0 26px 55px -45px rgba(0,0,0,.5)}
+html[data-proposal="B"] .case-detail-v5 .case-record{border-left:1px solid var(--line);padding-left:25px}
+@media(max-width:1280px){html[data-proposal="B"] .home-desk{grid-template-columns:minmax(260px,1fr) minmax(460px,1.6fr);grid-template-areas:"p1 wheel" "p2 wheel" "almanac almanac"}html[data-proposal="B"] .home-panel{min-height:90px}}
+@media(max-width:900px){html[data-proposal="B"] .home-desk{display:flex;flex-direction:column}html[data-proposal="B"] .wheel-wrap{width:min(100%,620px)}html[data-proposal="B"] .hp-col{width:100%;display:grid;grid-template-columns:1fr 1fr}html[data-proposal="B"] .almanac-card{width:100%}html[data-proposal="B"] .bv6-grid{grid-template-columns:repeat(3,minmax(0,1fr))}}
+@media(max-width:640px){html[data-proposal="B"] .hp-col{grid-template-columns:1fr}html[data-proposal="B"] .almanac-card{display:block}html[data-proposal="B"] .bv6-grid{grid-template-columns:repeat(2,minmax(0,1fr))}}

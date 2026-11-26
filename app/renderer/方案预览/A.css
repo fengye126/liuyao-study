@@ -1,0 +1,19 @@
+/* A · 案卷书房: wide study desk, quiet paper, reading as the first task. */
+html[data-proposal="A"] .home-desk{
+  grid-template-columns:minmax(520px,1.35fr) minmax(330px,.65fr);
+  grid-template-areas:"wheel p1" "wheel p2" "almanac p2";
+  align-items:center;gap:20px 34px;max-width:1660px;margin-inline:auto
+}
+html[data-proposal="A"] .wheel-wrap{max-width:730px;justify-self:center}
+html[data-proposal="A"] .hp-col:first-child{align-self:end}
+html[data-proposal="A"] .hp-col:last-child{align-self:start}
+html[data-proposal="A"] .home-reading{min-height:178px;justify-content:center;border-left:3px solid var(--accent)}
+html[data-proposal="A"] .home-reading .hr-book{font-family:var(--font-title);font-size:24px}
+html[data-proposal="A"] .home-panel{min-height:112px}
+html[data-proposal="A"] .almanac-card{justify-self:center;width:min(94%,680px);padding:20px 24px}
+html[data-proposal="A"] .bv6-grid{grid-template-columns:repeat(4,minmax(0,1fr));gap:28px}
+html[data-proposal="A"] .plate-v6{border-top:3px solid var(--accent)}
+html[data-proposal="A"] .case-detail-v5 .case-record{border-left:1px solid var(--line);padding-left:30px}
+@media(max-width:1160px){html[data-proposal="A"] .home-desk{grid-template-columns:minmax(0,1fr) minmax(300px,.75fr);gap:16px}}
+@media(max-width:900px){html[data-proposal="A"] .home-desk{display:flex;flex-direction:column;align-items:stretch}html[data-proposal="A"] .wheel-wrap{width:min(100%,620px)}html[data-proposal="A"] .hp-col{display:grid;grid-template-columns:1fr 1fr}html[data-proposal="A"] .almanac-card{width:100%}}
+@media(max-width:640px){html[data-proposal="A"] .hp-col{grid-template-columns:1fr}html[data-proposal="A"] .home-reading{min-height:116px}}

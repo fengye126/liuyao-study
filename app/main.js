@@ -1,0 +1,259 @@
+const { app, BrowserWindow, Menu, ipcMain, shell, dialog, screen, protocol } = require('electron');
+const path = require('path');
+const fs = require('fs');
+const https = require('https');
+const QRCode = require('qrcode');
+const lan = require('./lan');
+
+const isDev = !app.isPackaged;
+const DATA_DIR = path.join(app.getPath('appData'), '六爻书房');
+const USER_DATA = path.join(DATA_DIR, 'data');
+const RENDERER = path.join(__dirname, 'renderer');
+const DIRS = ['assets', 'assets/backgrounds', 'backups', 'logs'];
+const REPO = 'fengye126/liuyao-study';
+const RELEASES_API = 'https://api.github.com/repos/' + REPO + '/releases/latest';
+const UPDATE_CHECK_KEY = 'lastUpdateCheck';
+const DATA_FILES = ['books.js', 'media.js', 'lessons-manifest.js', 'library.js', 'almanac.js'];
+
+let mainWindow = null;
+let lanServer = null;
+let lanPort = 0;
+
+function ensureDirs() {
+  fs.mkdirSync(DATA_DIR, { recursive: true });
+  fs.mkdirSync(USER_DATA, { recursive: true });
+  for (const d of DIRS) fs.mkdirSync(path.join(DATA_DIR, d), { recursive: true });
+}
+
+function readJson(name, fallback) {
+  try { return JSON.parse(fs.readFileSync(path.join(DATA_DIR, name), 'utf8')); } catch (e) { return fallback; }
+}
+
+function writeJsonAtomic(name, value) {
+  const target = path.join(DATA_DIR, name);
+  const tmp = target + '.tmp';
+  fs.writeFileSync(tmp, JSON.stringify(value, null, 2), 'utf8');
+  fs.renameSync(tmp, target);
+}
+
+function backupData() {
+  try {
+    const stamp = new Date().toISOString().replace(/[:.]/g, '-');
+    const dir = path.join(DATA_DIR, 'backups', stamp);
+    fs.mkdirSync(dir, { recursive: true });
+    for (const f of ['data.json', 'config.json', 'peers.json']) {
+      const src = path.join(DATA_DIR, f);
+      if (fs.existsSync(src)) fs.copyFileSync(src, path.join(dir, f));
+    }
+    const list = fs.readdirSync(path.join(DATA_DIR, 'backups'))
+      .filter((x) => fs.statSync(path.join(DATA_DIR, 'backups', x)).isDirectory()).sort();
+    while (list.length > 3) fs.rmSync(path.join(DATA_DIR, 'backups', list.shift()), { recursive: true, force: true });
+  } catch (e) { console.error('backup failed', e); }
+}
+
+function parseVersion(v) { return String(v || '').replace(/^v/i, '').split('.').map((n) => parseInt(n, 10) || 0); }
+function isNewer(remote, local) {
+  const a = parseVersion(remote), b = parseVersion(local);
+  for (let i = 0; i < Math.max(a.length, b.length); i++) {
+    const x = a[i] || 0, y = b[i] || 0;
+    if (x > y) return true;
+    if (x < y) return false;
+  }
+  return false;
+}
+
+function fetchLatestRelease() {
+  return new Promise((resolve, reject) => {
+    const req = https.get(RELEASES_API, {
+      headers: { 'User-Agent': 'liuyao-shufang-updater', Accept: 'application/vnd.github+json' }, timeout: 12000
+    }, (res) => {
+      let body = '';
+      res.on('data', (d) => { body += d; });
+      res.on('end', () => {
+        if (res.statusCode === 404) return resolve(null);
+        if (res.statusCode !== 200) return reject(new Error('HTTP ' + res.statusCode));
+        try { resolve(JSON.parse(body)); } catch (e) { reject(e); }
+      });
+    });
+    req.on('timeout', () => req.destroy(new Error('timeout')));
+    req.on('error', reject);
+  });
+}
+
+async function checkForUpdates({ silent }) {
+  const current = app.getVersion();
+  let release;
+  try { release = await fetchLatestRelease(); }
+  catch (e) {
+    if (!silent) {
+      dialog.showMessageBox({
+        type: 'warning', title: '检查更新', message: '暂时连不上 GitHub，没法检查更新。',
+        detail: '稍后再试，或直接打开发布页查看。', buttons: ['打开发布页', '知道了'], defaultId: 1, cancelId: 1
+      }).then((r) => { if (r.response === 0) shell.openExternal('https://github.com/' + REPO + '/releases'); });
+    }
+    return;
+  }
+  writeJsonAtomic(UPDATE_CHECK_KEY, { at: Date.now() });
+  if (!release) { if (!silent) dialog.showMessageBox({ type: 'info', title: '检查更新', message: '还没有发布过版本。' }); return; }
+  const tag = release.tag_name || release.name || '';
+  if (!isNewer(tag, current)) {
+    if (!silent) dialog.showMessageBox({ type: 'info', title: '检查更新', message: '已是最新版本 v' + current });
+    return;
+  }
+  const asset = (release.assets || []).find((a) => /\.exe$/i.test(a.name));
+  dialog.showMessageBox({
+    type: 'info', title: '发现新版本',
+    message: '有新版 ' + tag + '（当前 v' + current + '）',
+    detail: (release.body || '').split('\n').slice(0, 8).join('\n'),
+    buttons: asset ? ['下载新版', '稍后', '打开发布页'] : ['打开发布页', '稍后'],
+    defaultId: 0, cancelId: 1
+  }).then((r) => {
+    if (asset && r.response === 0) shell.openExternal(asset.browser_download_url);
+    else if ((!asset && r.response === 0) || r.response === 2) shell.openExternal(release.html_url);
+  });
+}
+
+/* ---------- 资料导入 ---------- */
+function importedStatus() {
+  const books = path.join(USER_DATA, 'books.js');
+  return {
+    imported: fs.existsSync(books),
+    booksBytes: fs.existsSync(books) ? fs.statSync(books).size : 0,
+    files: DATA_FILES.filter((f) => fs.existsSync(path.join(USER_DATA, f)))
+  };
+}
+
+function findDataFiles(root) {
+  const found = {};
+  const queue = [root];
+  let guard = 0;
+  while (queue.length && guard++ < 300) {
+    const dir = queue.shift();
+    let ents = [];
+    try { ents = fs.readdirSync(dir, { withFileTypes: true }); } catch (e) { continue; }
+    for (const ent of ents) {
+      const full = path.join(dir, ent.name);
+      if (ent.isDirectory()) { if (!/node_modules|\.git/.test(ent.name)) queue.push(full); }
+      else if (DATA_FILES.includes(ent.name) && !found[ent.name]) found[ent.name] = full;
+    }
+  }
+  return found;
+}
+
+async function importData(win) {
+  const res = await dialog.showOpenDialog(win, {
+    title: '选择资料目录（含 books.js 的 data 文件夹或其上一级）', properties: ['openDirectory']
+  });
+  if (res.canceled || !res.filePaths[0]) return { ok: false, canceled: true };
+  const found = findDataFiles(res.filePaths[0]);
+  if (!found['books.js']) {
+    dialog.showMessageBox(win, { type: 'warning', title: '导入资料', message: '这个目录里没找到 books.js', detail: '请选择项目里的 09_原型\\data 文件夹（或它的上一级）。' });
+    return { ok: false, reason: 'no-books' };
+  }
+  fs.mkdirSync(USER_DATA, { recursive: true });
+  for (const name of DATA_FILES) if (found[name]) fs.copyFileSync(found[name], path.join(USER_DATA, name));
+  if (win) win.webContents.reload();
+  return { ok: true, imported: importedStatus() };
+}
+
+/* ---------- 局域网 ---------- */
+async function startLan() {
+  if (lanServer) return;
+  const r = await lan.start({ renderer: RENDERER, userData: USER_DATA, dataDir: DATA_DIR, version: app.getVersion() });
+  lanServer = r.server;
+  lanPort = r.port;
+}
+
+async function lanInfo() {
+  await startLan();
+  const ips = lan.lanIPs();
+  const url = 'http://' + (ips[0] || '127.0.0.1') + ':' + lanPort + '/';
+  let qr = '';
+  try { qr = await QRCode.toDataURL(url, { margin: 1, width: 240 }); } catch (e) { qr = ''; }
+  return { url, port: lanPort, qr, ips, imported: importedStatus() };
+}
+
+function createWindow() {
+  const area = screen.getPrimaryDisplay().workAreaSize;
+  const width = Math.max(900, Math.min(1440, Math.round(area.width * 0.96)));
+  const height = Math.max(600, Math.min(920, Math.round(area.height * 0.94)));
+  const win = new BrowserWindow({
+    width, height, minWidth: 900, minHeight: 600, center: true,
+    backgroundColor: '#F7F4EC', autoHideMenuBar: true, title: '六爻书房',
+    icon: path.join(RENDERER, 'brand-icon.png'),
+    webPreferences: { preload: path.join(__dirname, 'preload.js'), contextIsolation: true, nodeIntegration: false, sandbox: false }
+  });
+  mainWindow = win;
+  Menu.setApplicationMenu(null);
+  win.center();
+  win.loadFile(path.join(RENDERER, 'index.html'));
+  win.webContents.setWindowOpenHandler(({ url }) => {
+    if (/^https?:/i.test(url)) shell.openExternal(url);
+    return { action: 'deny' };
+  });
+  win.webContents.on('before-input-event', (event, input) => {
+    if (input.key === 'F12' && input.type === 'keyDown') win.webContents.openDevTools({ mode: 'detach' });
+  });
+  return win;
+}
+
+ipcMain.handle('app:info', () => ({ version: app.getVersion(), dataDir: DATA_DIR, isDev, imported: importedStatus() }));
+ipcMain.handle('app:checkUpdate', () => checkForUpdates({ silent: false }));
+ipcMain.handle('data:import', (e) => importData(BrowserWindow.fromWebContents(e.sender)));
+ipcMain.handle('data:status', () => importedStatus());
+ipcMain.handle('lan:info', () => lanInfo());
+ipcMain.handle('pdf:open', async (e, href) => {
+  const file = String(href || '').replace(/^file:\/\/\//, '');
+  if (!file || !fs.existsSync(file)) {
+    dialog.showMessageBox({ type: 'info', title: 'PDF 原件', message: 'PDF 原件不在这台电脑上。', detail: '安装包不含书源文件；请把 PDF 放进资料目录后再试。' });
+    return { ok: false };
+  }
+  await shell.openPath(file);
+  return { ok: true };
+});
+ipcMain.handle('data:load', (_e, name) => (['data.json', 'config.json', 'peers.json'].includes(name) ? readJson(name, null) : null));
+ipcMain.handle('data:save', (_e, name, value) => {
+  if (!['data.json', 'config.json', 'peers.json'].includes(name)) return false;
+  backupData(); writeJsonAtomic(name, value); return true;
+});
+ipcMain.handle('background:import', async () => {
+  const res = await dialog.showOpenDialog({
+    title: '选择背景图片 / GIF / 视频', properties: ['openFile'],
+    filters: [{ name: '图片与视频', extensions: ['jpg', 'jpeg', 'png', 'webp', 'gif', 'mp4', 'webm', 'mov'] }]
+  });
+  if (res.canceled || !res.filePaths[0]) return null;
+  const src = res.filePaths[0];
+  const stat = fs.statSync(src);
+  const ext = path.extname(src).toLowerCase();
+  const cap = ['.mp4', '.webm', '.mov'].includes(ext) ? 200 * 1024 * 1024 : 30 * 1024 * 1024;
+  if (stat.size > cap) return { error: '文件超过同步/导入上限' };
+  const name = 'background' + ext;
+  const dst = path.join(DATA_DIR, 'assets', 'backgrounds', name);
+  fs.copyFileSync(src, dst);
+  return { name, path: dst, size: stat.size };
+});
+
+app.whenReady().then(() => {
+  ensureDirs();
+  // 必须等 app ready 之后才能接管 file 协议
+  protocol.interceptFileProtocol('file', (req, cb) => {
+    try {
+      const u = new URL(req.url);
+      const p = decodeURIComponent(u.pathname).replace(/^\//, '');
+      const m = p.match(/renderer\/data\/([a-z0-9-]+\.js)$/i);
+      if (m) {
+        const imported = path.join(USER_DATA, m[1]);
+        if (fs.existsSync(imported)) return cb({ path: imported });
+      }
+      cb({ path: p });
+    } catch (e) { cb({ path: req.url }); }
+  });
+  writeJsonAtomic('config.json', readJson('config.json', { theme: 'paper', background: null, font: 'song', fontSize: 18, schemaVersion: 1 }));
+  writeJsonAtomic('data.json', readJson('data.json', { schemaVersion: 1, cases: [], notes: [], bookmarks: [], calendar: {}, modifiedAt: new Date().toISOString() }));
+  createWindow();
+  startLan();
+  setTimeout(() => checkForUpdates({ silent: true }), 5000);
+  app.on('activate', () => { if (BrowserWindow.getAllWindows().length === 0) createWindow(); });
+});
+
+app.on('window-all-closed', () => { if (process.platform !== 'darwin') app.quit(); });

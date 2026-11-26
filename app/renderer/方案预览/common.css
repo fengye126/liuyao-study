@@ -1,0 +1,146 @@
+/* Shared behavior and layout corrections for the three isolated previews. */
+html[data-proposal] .view:not([hidden]){animation:proposalEnter .22s ease-out both}
+@keyframes proposalEnter{from{opacity:.78}to{opacity:1}}
+html[data-proposal] .topbar,html[data-proposal] .rail,html[data-proposal] .home-reading,
+html[data-proposal] .home-panel,html[data-proposal] .home-cast-cta,
+html[data-proposal] .almanac-card{backdrop-filter:blur(18px) saturate(1.15);-webkit-backdrop-filter:blur(18px) saturate(1.15)}
+html[data-proposal] .home-reading,html[data-proposal] .home-panel,html[data-proposal] .home-cast-cta{
+  border:1px solid var(--line-strong);background:color-mix(in srgb,var(--surface) 76%,transparent);
+  min-height:112px;padding:18px 20px;box-shadow:0 15px 35px -30px rgba(32,29,25,.46);
+  transition:background .22s,border-color .22s,box-shadow .22s;
+}
+html[data-proposal] .home-reading:hover,html[data-proposal] .home-panel:hover,html[data-proposal] .home-cast-cta:hover{
+  transform:none;background:color-mix(in srgb,var(--surface) 92%,transparent);box-shadow:0 20px 36px -29px rgba(32,29,25,.55)
+}
+html[data-proposal] .home-reading .hr-k,html[data-proposal] .home-panel .hp-k{font-size:11px;letter-spacing:.12em}
+html[data-proposal] .home-reading .hr-book{font-size:clamp(16px,1.4vw,21px);line-height:1.5;max-width:26ch}
+html[data-proposal] .home-reading .hr-meta,html[data-proposal] .home-panel .hp-s{font-size:12px;line-height:1.55}
+html[data-proposal] .home-reading .hr-pct{font-size:14px;font-variant-numeric:tabular-nums}
+html[data-proposal] .hp-col:first-child .home-reading{order:-1}
+html[data-proposal] .home-panel .hp-v{font-size:clamp(16px,1.4vw,20px)}
+html[data-proposal] #homeRevisit{min-height:140px;justify-content:center}
+html[data-proposal] .home-cast-cta{font-size:18px;letter-spacing:.08em;align-items:flex-start}
+html[data-proposal] .home-cast-cta small{font-size:11px;letter-spacing:.03em}
+html[data-proposal] .wheel-wrap{transform:perspective(1600px) rotateX(7deg);transition:transform .36s cubic-bezier(.2,.7,.2,1)}
+html[data-proposal] .wheel-wrap:hover{transform:perspective(1600px) rotateX(2deg)}
+html[data-proposal] .wheel-wrap::before{
+  content:"";position:absolute;inset:1.5%;border-radius:50%;z-index:1;pointer-events:none;
+  border:1px dashed color-mix(in srgb,var(--accent) 48%,transparent);
+  box-shadow:0 0 0 8px color-mix(in srgb,var(--surface) 38%,transparent),0 10px 20px rgba(33,36,36,.1);
+  background:radial-gradient(circle at 50% 0%,color-mix(in srgb,var(--accent) 60%,transparent) 0 3px,transparent 4px);
+  will-change:transform;animation:proposalBezel 58s linear infinite;
+}
+@keyframes proposalBezel{to{transform:rotate(360deg)}}
+html[data-proposal] .wheel-pointer{z-index:4}
+html[data-proposal] .proposal-caption{font-size:11px;letter-spacing:.18em;color:var(--ink-2);margin-bottom:8px}
+html[data-proposal] .wheel-readout{z-index:3}
+
+/* Readable long-form pages. The table of contents remains naturally short. */
+html[data-proposal] .view[data-view="reader"]{max-width:none;width:100%}
+html[data-proposal] .rv5-stage{padding:12px 0 20px}
+html[data-proposal] .book-spread{width:min(100%,1720px);max-width:none}
+html[data-proposal] .spread-page{
+  min-height:max(680px,calc(100dvh - 190px));padding:clamp(27px,3vw,48px) clamp(30px,3.4vw,68px) 42px;
+}
+html[data-proposal] .spread-page .pg-body{max-width:62ch;margin-inline:auto}
+html[data-proposal].proposal-reading #topbar{display:none}
+html[data-proposal].proposal-reading .main{padding-top:12px}
+html[data-proposal] .rv5-bar{position:sticky;top:0;z-index:25;background:color-mix(in srgb,var(--surface) 91%,transparent);backdrop-filter:blur(18px)}
+html[data-proposal] .rv5-pager{position:sticky;bottom:0;z-index:20;background:color-mix(in srgb,var(--surface) 90%,transparent);backdrop-filter:blur(16px)}
+
+/* Blue thread-bound books remain blue in all three legacy themes. */
+html[data-proposal] .bv6-cover,html[data-proposal] .cover{
+  --cloth:#223e61;background:linear-gradient(105deg,#142841 0%,#29496c 8%,#203d60 18%,#294a6d 78%,#172e49 100%);
+  border:1px solid #14273b;border-radius:2px 7px 7px 2px;
+  box-shadow:inset 7px 0 10px rgba(4,16,29,.48),inset -2px 0 3px rgba(4,16,29,.35),0 18px 28px -20px rgba(12,22,32,.6)
+}
+html[data-proposal] .bv6-cover::before{width:14px;opacity:1;background:repeating-linear-gradient(to bottom,transparent 0 22px,rgba(233,221,184,.9) 23px 25px,transparent 26px 45px),linear-gradient(90deg,#172e47,#315274 70%,#203d60)}
+html[data-proposal] .bv6-cover::after{left:17px;right:auto;top:0;bottom:0;width:1px;height:auto;background:rgba(220,211,184,.44)}
+html[data-proposal] .bv6-cover:hover{transform:none;filter:brightness(1.08)}
+html[data-proposal] .bv6-cap b{font-size:13px}
+html[data-proposal] .cover .cover-label{background:#f1e8d8;color:#3a2e1e}
+
+/* A confirmed cast becomes a full scene, with one-step editing. */
+html[data-proposal] .proposal-edit{display:none;margin-left:auto}
+html[data-proposal].proposal-plate-active .proposal-edit{display:inline-flex}
+html[data-proposal].proposal-plate-active #view-cast{max-width:none;width:100%}
+html[data-proposal].proposal-plate-active .cast-v5{display:block;width:100%}
+html[data-proposal].proposal-plate-active .cast-left,
+html[data-proposal].proposal-plate-active .cast-stage{display:none}
+html[data-proposal].proposal-plate-active .cast-right{width:100%;max-width:none}
+html[data-proposal].proposal-plate-active #plate{width:100%;min-height:calc(100dvh - 220px);padding:clamp(25px,3vw,58px) clamp(20px,4vw,76px)}
+html[data-proposal].proposal-plate-active .plate6{max-width:1380px;margin:36px auto 0}
+html[data-proposal].proposal-plate-active .plate-head{max-width:1380px;margin-inline:auto}
+html[data-proposal].proposal-plate-active .plate6-rows{font-size:clamp(12px,1.22vw,19px)}
+@media(min-width:901px){
+  html[data-proposal].proposal-plate-active .plate6{margin-top:38px}
+  html[data-proposal].proposal-plate-active .plate6-head{padding-bottom:18px}
+  html[data-proposal].proposal-plate-active .plate6-head .p6-col{font-size:clamp(16px,1.5vw,21px)}
+  html[data-proposal].proposal-plate-active .plate6-head .p6-col b{font-size:1.12em}
+  html[data-proposal].proposal-plate-active .plate6-row{min-height:clamp(45px,5.9vh,58px);padding:7px 8px}
+  html[data-proposal].proposal-plate-active .p6-kin,
+  html[data-proposal].proposal-plate-active .p6-gz{font-size:clamp(13px,1.13vw,16px)}
+  html[data-proposal].proposal-plate-active .p6-wx,
+  html[data-proposal].proposal-plate-active .p6-beast{font-size:clamp(12px,1vw,14px)}
+  html[data-proposal].proposal-plate-active .p6-mark em{font-size:10px}
+  html[data-proposal].proposal-plate-active .p6-sub{font-size:10px}
+  html[data-proposal].proposal-plate-active .p6-arrow{font-size:15px}
+  html[data-proposal].proposal-plate-active .ph6-time,
+  html[data-proposal].proposal-plate-active .ph6-pillars,
+  html[data-proposal].proposal-plate-active .ph6-stars,
+  html[data-proposal].proposal-plate-active .star-c{font-size:12px}
+  html[data-proposal].proposal-plate-active .ph6-stars-k,
+  html[data-proposal].proposal-plate-active .star-c b{font-size:11px}
+}
+html[data-proposal] .case-detail,.case-detail-v5{max-width:none}
+html[data-proposal] .case-detail-v5{grid-template-columns:minmax(0,3fr) minmax(240px,1fr);gap:clamp(22px,2vw,42px);width:100%}
+html[data-proposal] .case-detail-v5 .mini-plate{max-width:none}
+@media(min-width:901px){
+  html[data-proposal] .case-detail-v5 .mini-plate .plate6-row{min-height:clamp(37px,4.7vh,47px)}
+  html[data-proposal] .case-detail-v5 .mini-plate .p6-ben,
+  html[data-proposal] .case-detail-v5 .mini-plate .p6-bian{grid-template-columns:3.3em 3em 1.5em minmax(3em,1fr) auto;gap:2px 6px}
+  html[data-proposal] .case-detail-v5 .mini-plate .p6-kin,
+  html[data-proposal] .case-detail-v5 .mini-plate .p6-gz{font-size:clamp(11px,1vw,14px)}
+  html[data-proposal] .case-detail-v5 .mini-plate .p6-beast,
+  html[data-proposal] .case-detail-v5 .mini-plate .p6-wx{font-size:clamp(10px,.9vw,12px)}
+  html[data-proposal] .case-detail-v5 .mini-plate .p6-col{font-size:16px}
+  html[data-proposal] .case-detail-v5 .mini-plate .p6-col b{font-size:17px}
+}
+
+/* Transcript first; audio remains next to the written lesson. */
+html[data-proposal] .lesson-body{grid-template-columns:minmax(0,1fr) minmax(240px,26%);gap:24px}
+html[data-proposal] .lesson-side{grid-column:1;grid-row:1}
+html[data-proposal] .lesson-img{grid-column:2;grid-row:1;position:sticky;top:20px}
+html[data-proposal] .lesson-audio{position:sticky;top:0;z-index:2;background:color-mix(in srgb,var(--surface) 93%,transparent);backdrop-filter:blur(12px)}
+html[data-proposal] .lesson-text{min-height:70dvh;max-width:86ch;width:100%;font-size:17px;line-height:1.9;padding:clamp(22px,3vw,52px)}
+
+/* Expand the hovered navigation item itself, not a detached tooltip. */
+html[data-proposal].rail-min .nav-btn:hover,html[data-proposal].rail-min .nav-btn:focus-visible{
+  justify-content:flex-start;gap:12px;width:190px;padding:0 15px;z-index:80;
+  background:var(--glass-panel);backdrop-filter:blur(16px);box-shadow:0 14px 30px -20px rgba(0,0,0,.5);
+  transition:width .22s cubic-bezier(.2,.7,.2,1),background .2s
+}
+html[data-proposal].rail-min .nav-btn:hover .nav-text,html[data-proposal].rail-min .nav-btn:focus-visible .nav-text{display:inline;font-size:13px}
+html[data-proposal].rail-min .nav-btn:hover::after,html[data-proposal].rail-min .nav-btn:focus-visible::after{display:none}
+
+@media(max-width:900px){
+  html[data-proposal] .home-desk .wheel-wrap{order:0}
+  html[data-proposal] .home-desk .hp-col:first-child{order:1}
+  html[data-proposal] .home-desk .hp-col:last-child{order:2}
+  html[data-proposal] .home-desk .almanac-card{order:3}
+  html[data-proposal] .book-spread{width:100%}
+  html[data-proposal] .spread-page{min-height:max(620px,calc(100dvh - 175px));padding:24px clamp(18px,4vw,38px) 35px}
+  html[data-proposal] .case-detail-v5{grid-template-columns:1fr}
+  html[data-proposal] .lesson-body{display:flex;flex-direction:column}
+  html[data-proposal] .lesson-side,html[data-proposal] .lesson-img{width:100%;position:static}
+  html[data-proposal] .lesson-img{order:2}
+}
+@media(max-width:640px){
+  html[data-proposal] .home-reading,html[data-proposal] .home-panel,html[data-proposal] .home-cast-cta{min-height:92px;padding:15px}
+  html[data-proposal] .wheel-wrap{transform:none!important}
+  html[data-proposal] .spread-page{min-height:calc(100dvh - 145px)}
+  html[data-proposal] .lesson-text{padding:20px;min-height:60dvh}
+  html[data-proposal].proposal-plate-active #plate{padding:24px 12px;min-height:calc(100dvh - 170px)}
+}
+@media(prefers-reduced-motion:reduce){html[data-proposal] .view:not([hidden]),html[data-proposal] .wheel-wrap::before{animation:none!important}}
+html.still[data-proposal] .wheel-wrap::before{animation:none!important}
