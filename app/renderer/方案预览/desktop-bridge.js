@@ -65,6 +65,15 @@
     lan.id = 'deskLanCard';
     host.appendChild(lan);
 
+    var upd = card('<h2 style="font-size:16px;letter-spacing:.1em;margin:0 0 10px">更新</h2>' +
+      '<p id="deskVerState" style="font-size:13px;color:var(--ink-2,#5b5b5b);margin:0 0 12px">当前版本读取中…</p>' +
+      '<div style="display:flex;gap:10px;flex-wrap:wrap">' +
+      '<button id="deskCheckUpdate" class="btn btn-primary btn-sm" type="button">检查更新</button>' +
+      '<button id="deskOpenRelease" class="btn btn-sm" type="button">打开发布页</button></div>' +
+      '<p style="font-size:12px;color:var(--ink-3,#8a8a8a);margin:10px 0 0">检查更新会读取 GitHub Releases；没有新版会提示已是最新。</p>');
+    upd.id = 'deskUpdateCard';
+    host.appendChild(upd);
+
     function refreshData() {
       if (typeof desktop.dataStatus !== 'function') return;
       desktop.dataStatus().then(function (s) {
@@ -97,6 +106,23 @@
       if (t && navigator.clipboard) navigator.clipboard.writeText(t.textContent || '').catch(function () {});
     });
     refreshData(); refreshLan();
+    if (document.getElementById('deskCheckUpdate')) {
+      desktop.info().then(function (info) {
+        var el = document.getElementById('deskVerState');
+        if (el && info && info.version) el.textContent = '当前版本 v' + info.version;
+      }).catch(function () {});
+      document.getElementById('deskCheckUpdate').addEventListener('click', function () {
+        var el = document.getElementById('deskVerState');
+        if (el) el.textContent = '正在检查更新…';
+        if (typeof desktop.checkUpdate !== 'function') { if (el) el.textContent = '当前版本不支持检查更新'; return; }
+        desktop.checkUpdate().then(function (r) {
+          if (!el) return;
+          if (r && r.hasUpdate) el.textContent = '发现新版本 v' + r.version + '（弹窗里可直接下载）';
+          else el.textContent = '已是最新版本 v' + ((r && r.version) || (window.__deskVersion || '')) + ' · ' + new Date().toLocaleTimeString('zh-CN', { hour: '2-digit', minute: '2-digit' });
+        }).catch(function () { if (el) el.textContent = '检查失败，可点「打开发布页」查看'; });
+      });
+      document.getElementById('deskOpenRelease').addEventListener('click', openReleases);
+    }
   }
 
   function markMissingBooks() {

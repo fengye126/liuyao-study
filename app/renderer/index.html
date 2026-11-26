@@ -263,6 +263,20 @@ html[data-theme="jade"] .bg-ambient::after{
     radial-gradient(80% 60% at 50% 100%, rgba(0,0,0,.55), transparent 70%);
   mix-blend-mode:multiply;
 }
+.bg-preset[data-preset="wash"]{
+  opacity:.85;
+  background-image:url("data:image/svg+xml;utf8,%3Csvg%20xmlns%3D'http%3A%2F%2Fwww.w3.org%2F2000%2Fsvg'%20width%3D'1200'%20height%3D'620'%20viewBox%3D'0%200%201200%20620'%3E%0A%3Cdefs%3E%0A%3Cfilter%20id%3D'b'%3E%3CfeGaussianBlur%20stdDeviation%3D'6'%2F%3E%3C%2Ffilter%3E%0A%3ClinearGradient%20id%3D'fade'%20x1%3D'0'%20y1%3D'0'%20x2%3D'0'%20y2%3D'1'%3E%3Cstop%20offset%3D'0'%20stop-color%3D'%232f3339'%20stop-opacity%3D'0'%2F%3E%3Cstop%20offset%3D'1'%20stop-color%3D'%232f3339'%20stop-opacity%3D'.55'%2F%3E%3C%2FlinearGradient%3E%0A%3C%2Fdefs%3E%0A%3Cg%20filter%3D'url(%23b)'%20fill%3D'none'%20stroke%3D'%232f3339'%20stroke-linecap%3D'round'%3E%0A%3Cpath%20d%3D'M-40%20470%20C%20120%20360%20210%20388%20300%20430%20C%20380%20466%20470%20392%20560%20372%20C%20660%20349%20720%20420%20830%20430%20C%20940%20440%201030%20372%201240%20404'%20stroke-width%3D'34'%20opacity%3D'.20'%2F%3E%0A%3Cpath%20d%3D'M-40%20510%20C%20140%20430%20250%20452%20340%20486%20C%20440%20524%20540%20452%20650%20438%20C%20760%20424%20860%20484%20980%20486%20C%201090%20488%201160%20446%201240%20462'%20stroke-width%3D'46'%20opacity%3D'.24'%2F%3E%0A%3Cpath%20d%3D'M-40%20556%20C%20180%20508%20320%20520%20430%20546%20C%20560%20576%20700%20520%20840%20528%20C%20980%20536%201100%20566%201240%20548'%20stroke-width%3D'60'%20opacity%3D'.16'%2F%3E%0A%3C%2Fg%3E%0A%3Cg%20fill%3D'%232f3339'%20opacity%3D'.22'%3E%0A%3Cellipse%20cx%3D'238'%20cy%3D'338'%20rx%3D'9'%20ry%3D'4'%2F%3E%3Cellipse%20cx%3D'262'%20cy%3D'352'%20rx%3D'5'%20ry%3D'3'%2F%3E%0A%3Cellipse%20cx%3D'905'%20cy%3D'300'%20rx%3D'7'%20ry%3D'3'%2F%3E%3Cellipse%20cx%3D'878'%20cy%3D'316'%20rx%3D'4'%20ry%3D'2'%2F%3E%0A%3Cellipse%20cx%3D'612'%20cy%3D'270'%20rx%3D'4'%20ry%3D'2'%2F%3E%0A%3C%2Fg%3E%0A%3Cg%20fill%3D'none'%20stroke%3D'%232f3339'%20stroke-linecap%3D'round'%20opacity%3D'.14'%3E%0A%3Cpath%20d%3D'M330%20300%20q%2060%20-34%20122%20-6'%20stroke-width%3D'3'%2F%3E%0A%3Cpath%20d%3D'M760%20250%20q%2074%20-30%20140%202'%20stroke-width%3D'2.4'%2F%3E%0A%3C%2Fg%3E%0A%3C%2Fsvg%3E"), var(--noise);
+  background-size:cover, 180px 180px;
+  background-position:center bottom, 0 0;
+  background-repeat:no-repeat, repeat;
+  mix-blend-mode:multiply;
+}
+html[data-theme="jade"] .bg-preset[data-preset="wash"]{
+  opacity:.42;
+  filter:invert(.9) hue-rotate(180deg);
+  mix-blend-mode:screen;
+}
+html[data-theme="jiangnan"] .bg-preset[data-preset="wash"]{ opacity:.8; }
 .bg-media{display:none}
 .bg-media.is-on{display:block}
 .bg-media img,.bg-media video{
@@ -5115,6 +5129,7 @@ html.rail-min .theme-dot:hover::after,html.rail-min .theme-dot:focus-visible::af
             <button class="preset-btn" data-preset="paper" aria-pressed="false">纸纹</button>
             <button class="preset-btn" data-preset="mist" aria-pressed="false">雾</button>
             <button class="preset-btn" data-preset="ink" aria-pressed="false">墨</button>
+            <button class="preset-btn" data-preset="wash" aria-pressed="false">水墨</button>
             </div>
             <div class="dropzone" id="bgDrop" tabindex="0" role="button" aria-describedby="bgDropNote">
             <svg aria-hidden="true"><use href="#i-upload"/></svg>
@@ -5716,7 +5731,7 @@ html.rail-min .theme-dot:hover::after,html.rail-min .theme-dot:focus-visible::af
   }
   function validRoute(r) { return ROUTES.indexOf(r) >= 0 || !!ROUTE_ALIAS[r]; }
   function validFont(f) { return ['fang', 'song', 'kai', 'hei'].indexOf(f) >= 0; }
-  function validPreset(p) { return ['theme', 'paper', 'mist', 'ink'].indexOf(p) >= 0; }
+  function validPreset(p) { return ['theme', 'paper', 'mist', 'ink', 'wash'].indexOf(p) >= 0; }
 
   function sanitizeReading(raw) {
     var out={demo:{pct:0,para:1,at:0,page:0},items:{},recent:[]};
@@ -5864,7 +5879,7 @@ html.rail-min .theme-dot:hover::after,html.rail-min .theme-dot:focus-visible::af
 
   function mediaNote() {
     if (state.bg.kind === 'file' && state.bg.name) return state.bg.name;
-    return { theme: '主题默认背景', paper: '纸纹', mist: '雾', ink: '墨' }[state.bg.preset] || '主题默认背景';
+    return { theme: '主题默认背景', paper: '纸纹', mist: '雾', wash: '水墨', ink: '墨' }[state.bg.preset] || '主题默认背景';
   }
 
   function updateBgPreview() {
