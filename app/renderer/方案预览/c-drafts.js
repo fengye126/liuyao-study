@@ -15,7 +15,7 @@
   function flush(){
     clearTimeout(timer);if(!enabled||!ready||restoring||!id||!snapshot)return;
     const n=input.value;
-    if(meaningful(snapshot,n)){store.drafts[id]={snapshot,note:n,question:$('#castQuestion')?.value||'',category:$('#castCategory')?.value||'财运',gender:$('#cSaveGender input:checked')?.value||'',updatedAt:Date.now()};store.active=id;}
+    if(meaningful(snapshot,n)){store.drafts[id]={snapshot,note:n,question:$('#castQuestion')?.value||'',category:$('#castCategory')?.value||'',gender:$('#cSaveGender input:checked')?.value||'',updatedAt:Date.now()};store.active=id;}
     else if(store.active===id)store.active='';
     persist();
   }
@@ -25,7 +25,7 @@
   function loadNote(record){
     input.value=record?.note||'';input.dataset.castId=id;
     const q=$('#castQuestion');if(q)q.value=record?.question||'';
-    const category=$('#castCategory');if(category)category.value=record?.category||'财运';
+    const category=$('#castCategory');if(category)category.value=record?.category||'';
     document.querySelectorAll('#cSaveGender input').forEach(e=>e.checked=e.value===record?.gender);
   }
   function sync(){
@@ -36,7 +36,7 @@
     flush();
   }
   window.CCastChanged=()=>{if(!queued){queued=true;queueMicrotask(sync)}};
-  window.CDraftMatches=()=>{sync();return id===signature(CGetCastSnapshot());};
+  window.CDraftMatches=()=>{if(!ready)return true;sync();return id===signature(CGetCastSnapshot());};
   window.CClearDraft=()=>{
     clearTimeout(timer);if(id){delete store.drafts[id];if(store.active===id)store.active='';}
     id='';snapshot=null;input.value='';input.dataset.castId='';
@@ -48,7 +48,7 @@
   for(const s of ['#castQuestion','#castCategory','#cSaveGender'])$(s)?.addEventListener('change',flush);
   new MutationObserver(()=>window.CCastChanged()).observe($('#plateTableRows'),{childList:true});
   new MutationObserver(()=>window.CCastChanged()).observe($('#plateTime'),{childList:true});
-  Promise.resolve(window.__LIUYAO_DEPS).then(()=>requestAnimationFrame(()=>{
+  Promise.resolve(window.__LIUYAO_ENGINE || window.__LIUYAO_DEPS).then(()=>requestAnimationFrame(()=>{
     if(!window.CGetCastSnapshot)return;
     const record=store.drafts[store.active];
     if(enabled&&record?.snapshot){

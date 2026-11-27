@@ -68,7 +68,46 @@ window.CCore = (() => {
     return {beast:name,ben,bian,fu,yin:/\s/.test(shapes[0][0]),byin:shapes[1]?/\s/.test(shapes[1][0]):false,
       moving:/[○〇×xX]→?/.test(raw),mark:raw.slice(0,boundary).match(/[世应應]/)?.[0]||'',bmark:raw.slice(boundary).match(/[世应應]/)?.[0]||'',raw};
   }
+  /* OCR 卦表归一化：728 页（\ 阳 / \\ 阴）与增删卜易（、 阳 / 、、 阴，塍蛇→腾蛇） */
+  function normalizeOcrText(text){
+    const raw=String(text||'').replace(/\r/g,'').split('\n').map(l=>l.replace(/塍蛇/g,'腾蛇').trim());
+    const out=[];let pendingBeast='';
+    const BEAST=/^(青龙|朱雀|勾陈|腾蛇|白虎|玄武)$/;
+    const ROW=/^(父母|兄弟|子孙|子孫|妻财|妻財|官鬼)([甲乙丙丁戊己庚辛壬癸]?[子丑寅卯辰巳午未申酉戌亥][金木水火土])?(\\{1,2}|、{1,2})([^\n]{0,8})$/;
+    const INLINE=/^(青龙|朱雀|勾陈|腾蛇|白虎|玄武)\s*(父母|兄弟|子孙|子孫|妻财|妻財|官鬼)\s*([甲乙丙丁戊己庚辛壬癸]?[子丑寅卯辰巳午未申酉戌亥][金木水火土])\s*(\\{1,2}|、{1,2})\s*([世应應])?/;
+    for(let i=0;i<raw.length;i++){
+      const line=raw[i];
+      if(!line){out.push('');continue;}
+      if(BEAST.test(line)){pendingBeast=line;continue;}
+      const inl=line.match(INLINE);
+      if(inl){
+        const yin=inl[4].length>=2, shape=yin?'▅▅ ▅▅':'▅▅▅▅▅';
+        const moving=/[○〇×xX]/.test(line)?' ○':'';
+        out.push(inl[1]+' '+inl[2]+inl[3]+' '+shape+moving+(inl[5]?' '+inl[5]:''));
+        pendingBeast='';
+        continue;
+      }
+      const m=line.match(ROW);
+      if(m){
+        let mark='',moving='';
+        const rest=(m[4]||'').trim();
+        if(rest&&/^[世应應]/.test(rest))mark=rest[0];
+        else if(!rest&&/^[世应應]$/.test(raw[i+1]||'')){mark=raw[i+1][0];i++;}
+        const nxt=(raw[i+1]||'').trim();
+        if(/[○〇×xX]\s*→?/.test(nxt)){moving=' ○';i++;}
+        const yin=m[3].length>=2, shape=yin?'▅▅ ▅▅':'▅▅▅▅▅';
+        out.push((pendingBeast?pendingBeast+' ':'')+m[1]+(m[2]||'')+' '+shape+(moving?moving:'')+(mark?' '+mark:''));
+        pendingBeast='';
+        continue;
+      }
+      if(pendingBeast){out.push(pendingBeast);pendingBeast='';}
+      out.push(line);
+    }
+    if(pendingBeast)out.push(pendingBeast);
+    return out.join('\n');
+  }
   function blocks(text,nameMap={}){
+    text=normalizeOcrText(text);
     const original=String(text||'').replace(/\r/g,'').split('\n'),lines=[];
     for(let i=0;i<original.length;i++){
       let line=original[i];
@@ -133,7 +172,7 @@ window.CCore = (() => {
     return {cpl,lines,lineH:lh,contentH,cpp:cpl*lines};
   }
   function paginate(text,m,isHead,nameMap){
-    const pages=[],toc=[];let cur=[],curIndex=[],heads=[],used=0,cursor=0,start=0,flow=[];
+    const pages=[],toc=[],tocSeen=new Set();let cur=[],curIndex=[],heads=[],used=0,cursor=0,start=0,flow=[];
     const flush=()=>{
       if(cur.length||flow.length){
         pages.push({paras:cur.slice(),flow:flow.slice(),heads:heads.slice(),start,end:cursor,
@@ -159,7 +198,13 @@ window.CCore = (() => {
       const joined=[];lines.forEach((line,i)=>{const prev=joined.at(-1);if(line&&prev&&prev.text.length>=18&&!/[。！？：；\?]$/.test(prev.text)&&!isHead(prev.text)&&!isHead(line))prev.text+=line;else if(line)joined.push({text:line,index:indexSlots.has(i)})});
       for(const token of joined){
         let p2=token.text;const h=isHead(p2);
-        if(h){if(m.lines-used<3)flush();if(!token.index)toc.push({label:p2,page:pages.length,offset:cursor});heads.push(p2);}
+        if(h){if(m.lines-used<3)flush();if(!token.index){
+          const cleanLabel=p2.replace(/^[·•\s]*\d+[·•\s]*/,'').replace(/\s+\d+$/,'').trim();
+          if(cleanLabel&&!/^目\s*[录錄]$/.test(cleanLabel)&&!tocSeen.has(cleanLabel)){
+            tocSeen.add(cleanLabel);toc.push({label:cleanLabel,page:pages.length,offset:cursor});
+          }
+        }
+        heads.push(p2);}
         while(p2.length){
           let available=Math.floor(m.lines-used-.5);if(available<1){flush();available=m.lines;}
           const chunk=p2.slice(0,available*m.cpl);

@@ -112,3 +112,20 @@ html[data-proposal="C"] .tb-ganzhi,html[data-proposal="C"] .home-reading .hr-met
   html[data-proposal="C"] .mini-plate .p6-bian{grid-template-columns:30px 10px 22px 26px 10px;gap:1px}
   html[data-proposal="C"] .mini-plate .p6-yao{width:30px}
 }
+
+/* ===== v6.2 移动端修正 ===== */
+.c-mobile-cta{display:none;position:fixed;left:16px;right:16px;bottom:calc(64px + env(safe-area-inset-bottom,0px));z-index:180;align-items:center;justify-content:center;gap:8px;height:48px;border:0;border-radius:999px;background:var(--accent-strong,#8B2F24);color:#fff;font:15px/1 var(--font-song,serif);letter-spacing:.12em;box-shadow:0 6px 20px rgba(60,40,20,.28);cursor:pointer}
+.c-mobile-cta:active{transform:scale(.985)}
+@media (max-width:640px){
+  html[data-route="home"] .c-mobile-cta{display:flex}
+  .p6-shi,.p6-sub,.p6-kong,.p6-move{font-size:12px !important}
+  .p6-arrow{font-size:13px}
+  .star-list6 .star-c,.star-list6 .star-c b{font-size:11px !important}
+  #view-case .view-head,#view-settings>.view-head{display:none}
+  .c-lesson-tools.is-collapsed>div{display:none}
+  .c-lesson-tools .c-lesson-more{display:inline-flex}
+}
+.c-lesson-tools .c-lesson-more{display:none;align-items:center;margin-left:auto}
+.c-lesson-tools>.c-lesson-more{display:none}
+@media (max-width:640px){ .c-lesson-tools>.c-lesson-more{display:inline-flex;margin-left:auto} }
+@media (max-width:640px){ .c-lesson-tools:not(.is-collapsed) .c-lesson-more{display:inline-flex} }

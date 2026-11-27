@@ -31,6 +31,13 @@ if not candidates:
     sys.exit("构建失败：没有生成方案C页")
 text = candidates[0].read_text(encoding="utf-8")
 
+try:
+    import json as _json
+    _ver = _json.loads((repo / "app/package.json").read_text(encoding="utf-8")).get("version", "")
+    if _ver:
+        text = text.replace("v0.1.0", "v" + _ver)
+except Exception:
+    pass
 tag = '<script src="方案预览/desktop-bridge.js"></script>'
 if tag not in text:
     text = text.replace("</body>", tag + "\n</body>", 1)

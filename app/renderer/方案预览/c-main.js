@@ -84,3 +84,26 @@
   new IntersectionObserver(entries=>{wheelVisible=entries[0]?.isIntersecting;pauseWheel()},{threshold:.12}).observe($('#wheelWrap'));
   document.addEventListener('visibilitychange',pauseWheel);new MutationObserver(pauseWheel).observe(doc,{attributes:true,attributeFilter:['data-route']});
 })();
+
+
+/* v6.2 移动端首屏起卦按钮 */
+(function () {
+  function ensureCta() {
+    if (document.querySelector('.c-mobile-cta')) return;
+    var b = document.createElement('button');
+    b.type = 'button';
+    b.className = 'c-mobile-cta';
+    b.innerHTML = '起卦排盘';
+    b.setAttribute('aria-label', '起卦排盘');
+    b.addEventListener('click', function () {
+      if (window.CApp && CApp.toast) {}
+      var nav = document.querySelector('[data-route="cast"]');
+      if (nav) nav.click(); else location.href = location.pathname + '?s=cast';
+      var toss = document.querySelector('#tossBtn');
+      if (toss) setTimeout(function () { toss.focus({ preventScroll: true }); }, 260);
+    });
+    document.body.appendChild(b);
+  }
+  if (document.readyState === 'loading') document.addEventListener('DOMContentLoaded', ensureCta);
+  else ensureCta();
+})();

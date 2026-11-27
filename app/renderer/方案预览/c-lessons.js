@@ -16,12 +16,44 @@ window.CLessons = (() => {
     return out;
   }
   function renderText(){
-    if(!current)return;const r=record(),text=raw?current.text:readingText(),ed=!raw&&r.text==null?edition():null;
-    const host=document.querySelector('#lessonText');
-    host.innerHTML=ed?ed.sections.map(s=>`<p><button class="c-lesson-seek" type="button" data-c-lesson-seek="${s.start}" aria-label="从 ${stamp(s.start)} 回听本段">${stamp(s.start)}</button>${esc(s.text)}</p>`).join(''):text?paragraphs(text).map(p=>'<p>'+esc(p)+'</p>').join(''):'<div class="c-lesson-empty"><p>这堂课尚无转写</p><p class="c-muted">可以听录音，并在当前时间记下笔记</p></div>';
-    const state=document.querySelector('#cTranscriptState');if(state){state.textContent=text?(raw?'原始转写':r.reviewed?'已校对':ed?ed.label:'待校转写'):'';state.title=ed?'整理稿删去口头重复；存疑处保留回听提示，原始转写可随时查看。':'';}
+    if(!current)return;
+    const r=record(),ed=edition(),host=document.querySelector('#lessonText');
+    const seekBtn=(start)=>`<button class="c-lesson-seek" type="button" data-c-lesson-seek="${start}" aria-label="从 ${stamp(start)} 回听本段">${stamp(start)}</button>`;
+    let html='';
+    if(raw){
+      html=paragraphs(current.text).map(p=>'<p>'+esc(p)+'</p>').join('');
+    }else if(r.text==null){
+      html=ed?ed.sections.map(s=>`<p>${seekBtn(s.start)}${esc(s.text)}</p>`).join(''):
+        (current.text?paragraphs(current.text).map(p=>'<p>'+esc(p)+'</p>').join(''):'<div class="c-lesson-empty"><p>这堂课尚无转写</p><p class="c-muted">可以听录音，并在当前时间记下笔记</p></div>');
+    }else{
+      /* 个人校对稿：沿用整理稿的时间点，尽量保住回听入口 */
+      const ps=paragraphs(r.text),secs=ed&&Array.isArray(ed.sections)?ed.sections:null;
+      html=ps.map((txt,i)=>secs&&secs[i]?`<p>${seekBtn(secs[i].start)}${esc(txt)}</p>`:`<p>${esc(txt)}</p>`).join('');
+    }
+    host.innerHTML=html;
+    const text=r.text!=null?r.text:(current.text||'');
+    const state=document.querySelector('#cTranscriptState');
+    if(state){
+      state.textContent=!text?'':raw?'原始转写':(r.text!=null?(r.reviewed?'已校对':'个人校对稿'):(ed?ed.label:'待校转写'));
+      state.title=ed?'整理稿删去口头重复；存疑处保留回听提示，原始转写可随时查看。':'';
+    }
     const original=document.querySelector('#cLessonOriginal');if(original){original.hidden=!current.text;original.setAttribute('aria-pressed',String(raw));}
     const correction=document.querySelector('#cLessonCorrect');if(correction)correction.hidden=!current.text&&!r.text;
+    let restore=document.querySelector('#cLessonRestore');
+    const tools=document.querySelector('#view-lesson .c-lesson-tools div');
+    if(r.text!=null&&tools){
+      if(!restore){
+        restore=document.createElement('button');restore.className='btn btn-sm';restore.id='cLessonRestore';restore.textContent='恢复整理稿';
+        tools.appendChild(restore);
+        restore.addEventListener('click',()=>{
+          const rec=record();
+          if(!rec||rec.text==null)return;
+          if(rec.revisions)rec.revisions.push({at:Date.now(),text:rec.text,reviewed:!!rec.reviewed});
+          delete rec.text;rec.reviewed=false;rec.editedAt=Date.now();
+          if(persist()){raw=false;renderText();app.toast('已恢复整理稿与时间轴')}
+        });
+      }
+    }else if(restore){restore.remove();}
   }
 
   /* ---- 课页与音频同步（有整理稿时间戳的课才启用） ---- */
@@ -112,15 +144,19 @@ window.CLessons = (() => {
     if(!needle)return;
     const gz=(/([\u5b50\u4e11\u5bc5\u536f\u8fb0\u5df3\u5348\u672a\u7533\u9149\u620c\u4ea5])\u6708\s*([\u7532\u4e59\u4e19\u4e01\u620a\u5df1\u5e9a\u8f9b\u58ec\u7678][\u5b50\u4e11\u5bc5\u536f\u8fb0\u5df3\u5348\u672a\u7533\u9149\u620c\u4ea5])\u65e5/.exec(title));
     const hits=[];
+    const escRe=(x)=>String(x).replace(/[.*+?^${}()|[\]\\]/g,'\\$&');
     for(const r of app.catalog()||[]){
       if(r.kind!=='book')continue;
-      let at=String(r.text||'').indexOf(needle);
-      if(at<0)continue;
+      const t=String(r.text||'');
+      let at=-1;
       if(gz){
-        const near=r.text.slice(Math.max(0,at-300),at+300);
-        const g=/([\u5b50\u4e11\u5bc5\u536f\u8fb0\u5df3\u5348\u672a\u7533\u9149\u620c\u4ea5])\u6708[\s\u3000]*([\u7532\u4e59\u4e19\u4e01\u620a\u5df1\u5e9a\u8f9b\u58ec\u7678][\u5b50\u4e11\u5bc5\u536f\u8fb0\u5df3\u5348\u672a\u7533\u9149\u620c\u4ea5])\u65e5/.exec(near);
-        if(!g||g[1]!==gz[1]||g[2]!==gz[2])continue;
+        /* 正文格式：X月Y日，占..., 得「卦名」——先按干支+卦名同句匹配 */
+        const re=new RegExp(escRe(gz[1])+'月[\\s\\u3000]*'+escRe(gz[2])+'日[\\s\\S]{0,80}?'+escRe(needle));
+        const m2=re.exec(t);
+        if(m2){at=m2.index+m2[0].lastIndexOf(needle);}
       }
+      if(at<0)at=t.indexOf(needle);
+      if(at<0)continue;
       hits.push({kind:'book',id:r.id,name:r.name,anchor:{offset:at},quote:needle});
       if(hits.length>=4)break;
     }
@@ -135,6 +171,23 @@ window.CLessons = (() => {
   function renderBookmarks(){const r=record(),host=document.querySelector('#cLessonBookmarks');if(!host)return;host.innerHTML=(r.bookmarks||[]).map(b=>`<button type="button" data-c-audio-bookmark="${esc(b.id)}"><time>${stamp(b.time)}</time><span>${esc(b.note)}</span></button>`).join('');}
   function savePosition(force=false){if(!current)return;const audio=document.querySelector('#lessonAudio');if(!audio?.currentSrc||norm(audio.currentSrc)!==norm(current.audio)||!Number.isFinite(audio.currentTime))return;if(force||Date.now()-lastSave>5000){lastSave=Date.now();record().position=audio.currentTime;persist()}}
   function beforeRender(){savePosition(true);if(onResume)document.querySelector('#lessonAudio').removeEventListener('loadedmetadata',onResume);current=null;}
+
+  function decorateLessonTools(view){
+    const tools=view.querySelector('.c-lesson-tools');
+    if(!tools||tools.querySelector('.c-lesson-more'))return;
+    const btn=document.createElement('button');
+    btn.type='button';btn.className='btn btn-sm c-lesson-more';btn.textContent='更多';
+    btn.setAttribute('aria-expanded','false');
+    btn.addEventListener('click',()=>{
+      if(innerWidth>640)return;
+      const collapsed=tools.classList.toggle('is-collapsed');
+      btn.setAttribute('aria-expanded',String(!collapsed));
+      btn.textContent=collapsed?'更多':'收起';
+    });
+    /* 放在折叠区外面，收起后仍可点开 */
+    tools.appendChild(btn);
+  }
+
   function render(item){
     current=item;raw=false;imageScroll=0;
     const view=document.querySelector('#view-lesson');view.classList.toggle('c-audio-only',!item.img);view.classList.remove('c-show-lesson-image');
@@ -143,18 +196,44 @@ window.CLessons = (() => {
     let toolbar=view.querySelector('.c-lesson-tools');if(!toolbar){toolbar=document.createElement('div');toolbar.className='c-lesson-tools';view.querySelector('.lesson-bar').after(toolbar)}
     toolbar.innerHTML='<span id="cTranscriptState"></span><div><button class="btn btn-sm" id="cLessonOriginal" aria-pressed="false">原文</button><button class="btn btn-sm" id="cLessonCorrect">校对</button>'+(item.img?'<button class="btn btn-sm" id="cLessonImage" aria-expanded="false">配图</button>':'')+'<button class="btn btn-sm" id="cLessonBookmark">记下此刻</button></div>';
     let bookmarks=document.querySelector('#cLessonBookmarks');if(!bookmarks){bookmarks=document.createElement('aside');bookmarks.id='cLessonBookmarks';bookmarks.setAttribute('aria-label','听课笔记');view.querySelector('.lesson-audio').after(bookmarks)}
-    renderText();renderBookmarks();const audio=document.querySelector('#lessonAudio'),r=record();decorateSync(view,audio);lessonBookLinks();
+    renderText();renderBookmarks();const audio=document.querySelector('#lessonAudio'),r=record();decorateSync(view,audio);lessonBookLinks();decorateLessonTools(view);
     const position=r.position;onResume=()=>{if(current===item&&position>0&&Number.isFinite(audio.duration))audio.currentTime=Math.min(position,Math.max(0,audio.duration-1));};if(audio.readyState>=1)onResume();else audio.addEventListener('loadedmetadata',onResume,{once:true});
   }
   function decorateAudio(){
     const list=document.querySelector('#audioList');if(!list)return;
-    function filter(){const q=audioQuery.trim().toLowerCase();for(const group of list.querySelectorAll('.audio-group')){let found=0;for(const row of group.querySelectorAll('.c-audio-row')){const match=!q||row.textContent.toLowerCase().includes(q);row.hidden=!match;if(match)found++}group.hidden=!found}}
+    function filter(){
+      const q=audioQuery.trim().toLowerCase();
+      const numMatch=q.match(/^第?\s*0*(\d{1,3})\s*课?$/);
+      for(const group of list.querySelectorAll('.audio-group')){
+        let found=0;const rows=[...group.querySelectorAll('.c-audio-row')];
+        for(const row of rows){
+          const btn=row.querySelector('.audio-item');
+          const title=(btn?.dataset.audioTitle||row.textContent||'').toLowerCase();
+          const n=btn?.dataset.lessonN?Number(btn.dataset.lessonN):0;
+          let match=!q||title.includes(q);
+          if(!match&&numMatch&&n===Number(numMatch[1]))match=true;
+          if(!match&&numMatch&&new RegExp('0*'+Number(numMatch[1])+'_').test(title))match=true;
+          row.hidden=!match;
+          if(match)found++;
+        }
+        const shown=rows.filter(r=>!r.hidden).sort((a,b)=>(b.querySelector('.audio-item')?.dataset.lessonN?1:0)-(a.querySelector('.audio-item')?.dataset.lessonN?1:0));
+        for(const r of shown)group.appendChild(r);
+        group.hidden=!found;
+        group.dataset.lessonMatch=[...group.querySelectorAll('.audio-item')].some(b=>b.dataset.lessonN)?'1':'';
+      }
+      /* 有整理稿的组排前面 */
+      const groups=[...list.querySelectorAll('.audio-group')];
+      groups.sort((a,b)=>(b.dataset.lessonMatch?1:0)-(a.dataset.lessonMatch?1:0));
+      for(const g of groups)list.appendChild(g);
+    }
     if(!list.querySelector('#cAudioQuery')){const label=document.createElement('label');label.className='c-audio-search';label.innerHTML='<svg aria-hidden="true"><use href="#i-search"></use></svg><input id="cAudioQuery" type="search" placeholder="查找录音" aria-label="查找录音">';list.prepend(label);const input=label.querySelector('input');input.value=audioQuery;input.addEventListener('input',e=>{audioQuery=e.target.value;filter()});}
     for(const button of list.querySelectorAll('.audio-item')){
       if(button.parentElement.classList.contains('c-audio-row'))continue;
       const row=document.createElement('div');row.className='c-audio-row';button.before(row);row.append(button);
-      const open=document.createElement('button');open.type='button';open.className='btn btn-sm';open.textContent='学习';open.setAttribute('aria-label','学习：'+button.dataset.audioTitle);
-      open.addEventListener('click',()=>{const match=app.lessons().find(l=>norm(l.audio)===norm(button.dataset.audioSrc));if(match)app.openLesson(match.n);else app.showLesson({id:'audio:'+button.dataset.audioSrc,title:button.dataset.audioTitle,audio:button.dataset.audioSrc,text:'',img:''})});row.append(open);
+      const lessonMatch=(app.lessons()||[]).find(l=>norm(l.audio)===norm(button.dataset.audioSrc));
+      if(lessonMatch){button.dataset.lessonN=String(lessonMatch.n);}
+      const open=document.createElement('button');open.type='button';open.className='btn btn-sm';open.textContent=lessonMatch?'学习（有整理稿）':'学习';open.setAttribute('aria-label','学习：'+button.dataset.audioTitle);
+      open.addEventListener('click',()=>{if(lessonMatch)app.openLesson(lessonMatch.n);else app.showLesson({id:'audio:'+button.dataset.audioSrc,title:button.dataset.audioTitle,audio:button.dataset.audioSrc,text:'',img:''})});row.append(open);
     }
     filter();
   }

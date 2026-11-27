@@ -11,7 +11,7 @@ app = repo / "app"
 fails = []
 
 def run(cmd, cwd=None):
-    r = subprocess.run(cmd, cwd=cwd, capture_output=True, text=True, shell=False)
+    r = subprocess.run(cmd, cwd=cwd, capture_output=True, text=True, encoding="utf-8", errors="replace", shell=False)
     return r.returncode, (r.stdout or "") + (r.stderr or "")
 
 # 1) JS 语法
@@ -26,6 +26,13 @@ if node:
     print("语法检查：%d 个文件" % len(targets))
 else:
     print("跳过语法检查（未找到 node）")
+
+# 1.5) 历法金样例
+code, out = run([node, str(repo / "tools" / "check" / "astro_golden.cjs")]) if node else (0, "skip")
+if code != 0:
+    fails.append("历法金样例失败：" + out.strip()[-300:])
+else:
+    print(out.strip()[:120])
 
 # 2) 构建可复现：重建后与 app/renderer/index.html 比对（忽略 bridge 注入行）
 before = (app / "renderer" / "index.html").read_text(encoding="utf-8")

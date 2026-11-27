@@ -17,8 +17,12 @@ window.CStudy = (() => {
       found.push({group:'书内文字',label:r.name,hint:r.text.slice(Math.max(0,at-18),at+q.length+42).replace(/\s+/g,' '),icon:'i-reader',key:'',run:()=>{app.openReader(r.kind,r.id);searchTerm=q;const m=app.readerMatches(q)[0];if(m)app.jumpAnchor(m.offset);afterReader();}});if(found.length===8)break;
     }
     for(const lesson of app.lessons()){
-      if(found.length>=12)break;const at=String(lesson.text||'').indexOf(q);if(at<0&&!lesson.title.includes(q))continue;
-      found.push({group:'课程',label:lesson.title,hint:at>=0?lesson.text.slice(Math.max(0,at-16),at+45):'录音与配套图',icon:'i-audio',key:'',run:()=>app.openLesson(lesson.n)});
+      if(found.length>=12)break;
+      const numMatch=q.match(/^第?\s*0*(\d{1,3})\s*课?$/);
+      const alias=numMatch&&Number(numMatch[1])===Number(lesson.n);
+      const at=String(lesson.text||'').indexOf(q);
+      if(at<0&&!lesson.title.includes(q)&&!alias)continue;
+      found.push({group:'课程',label:lesson.title+'（第 '+lesson.n+' 课）',hint:at>=0?lesson.text.slice(Math.max(0,at-16),at+45):'录音讲解与配图',icon:'i-audio',key:'',run:()=>app.openLesson(lesson.n)});
     }
     return found;
   }
@@ -130,10 +134,55 @@ window.CStudy = (() => {
     const d=CUI.dialog('摘录与笔记',`<div class="c-reference-source">${esc(ref.name)}${ref.lessonTime!=null?' · '+fmtTime(ref.lessonTime):''}</div><blockquote>${esc(ref.quote||'')}</blockquote><label for="cQuoteNote">笔记</label><textarea id="cQuoteNote" rows="4" placeholder="写下理解或疑问"></textarea><label for="cQuoteCase">关联卦例</label><select id="cQuoteCase"><option value="">仅存为读书笔记</option>${choices}</select>`,[{value:'cancel',label:'取消'},{value:'save',label:'保存',primary:true}]);
     d.result.then(({value,form})=>{if(value!=='save')return;const entry={id:crypto.randomUUID(),reference:ref,note:form.querySelector('textarea').value.trim(),caseId:form.querySelector('select').value,createdAt:Date.now()};data.notes.push(entry);if(persist()){app.toast('已存入笔记库');renderStudyNoteEntry();}selection='';selectedRef=null;});
   }
+  function highlightReaderQuote(quote){
+    const q=String(quote||'').trim();
+    if(q.length<2)return;
+    const mark=()=>{
+      const bodies=[...document.querySelectorAll('#bookSpread .pg-body')];
+      for(const body of bodies){
+        if(body.querySelector('mark.c-focus-mark'))continue;
+        const walker=document.createTreeWalker(body,NodeFilter.SHOW_TEXT,{acceptNode(n){return n.nodeValue&&n.nodeValue.includes(q)?NodeFilter.FILTER_ACCEPT:NodeFilter.FILTER_REJECT}});
+        const node=walker.nextNode();
+        if(!node)continue;
+        const idx=node.nodeValue.indexOf(q);
+        try{
+          const range=document.createRange();range.setStart(node,idx);range.setEnd(node,idx+q.length);
+          const m=document.createElement('mark');m.className='c-focus-mark';
+          m.style.cssText='background:var(--accent-wash,rgba(166,58,46,.16));color:inherit;box-shadow:0 0 0 1px var(--accent-soft,rgba(166,58,46,.3));border-radius:2px';
+          range.surroundContents(m);
+          return true;
+        }catch(e){return false}
+      }
+      return false;
+    };
+    const retry=(n)=>{
+      if(mark())return;
+      if(n<=0)return;
+      setTimeout(()=>retry(n-1),350);
+    };
+    setTimeout(()=>retry(3),200);
+  }
+
   function openReference(ref){
     if(!ref||!ref.kind||ref.kind==='manual'){app.toast('这是随手笔记，没有原文出处');return;}
     if(ref.kind==='lesson'){if(app.openLesson)app.openLesson(Number(ref.id));return;}
-    app.openReader(ref.kind,ref.id);app.jumpAnchor(ref.anchor.offset);searchTerm=(ref.quote||'').slice(0,24);afterReader();
+    app.openReader(ref.kind,ref.id);searchTerm=(ref.quote||'').slice(0,24);afterReader();
+    const target=ref.anchor&&ref.anchor.offset||0;
+    const doJump=(tries)=>{
+      if(tries<=0){try{app.jumpAnchor(target)}catch(e){};highlightReaderQuote(ref.quote);return;}
+      const bodies=document.querySelectorAll('#bookSpread .pg-body');
+      const pageNo=(document.querySelector('.reader-pager .pg-num, #readerPageNo')?.textContent||'');
+      if(bodies.length&&pageNo){
+        var byText=-1;
+        try{byText=app.findPageByText?app.findPageByText(ref.quote):-1}catch(e){}
+        if(byText>=0&&app.jumpToPage){app.jumpToPage(byText)}else{app.jumpAnchor(target)}
+        setTimeout(()=>highlightReaderQuote(ref.quote),520);
+        return;
+      }
+      setTimeout(()=>doJump(tries-1),140);
+    };
+    setTimeout(()=>doJump(24),160);
+    highlightReaderQuote(ref.quote);
   }
   function renderCaseReferences(id,host){
     const notes=data.notes.filter(n=>n.caseId===id);host.innerHTML=notes.map(n=>`<button type="button" class="c-reference-link" data-c-reference="${esc(n.id)}">${esc(n.reference.name)}<span>${esc((n.reference.quote||n.note||'').slice(0,65))}</span></button>`).join('');
@@ -269,7 +318,17 @@ window.CStudy = (() => {
       const t = e.target;
       const edit = t.closest('[data-edit]'), del = t.closest('[data-del]'), jump = t.closest('[data-jump]');
       if(edit){ const n = data.notes.find(function(x){ return x.id === edit.dataset.edit; }); d.el.close(); editNote(n); return; }
-      if(del){ const id = del.dataset.del; data.notes = data.notes.filter(function(x){ return x.id !== id; }); persist(); d.el.close(); openNoteLibrary(); app.toast('笔记已删除'); renderStudyNoteEntry(); return; }
+      if(del){
+        const id = del.dataset.del;
+        const target = data.notes.find(function(x){ return x.id === id; });
+        const brief = String((target && target.note) || '').replace(/\s+/g, ' ').slice(0, 36);
+        Promise.resolve(CUI.confirm('删除这条笔记？', brief ? ('删除后无法恢复：' + brief + '…') : '删除后无法恢复。', '删除')).then(function(ok){
+          if(!ok)return;
+          data.notes = data.notes.filter(function(x){ return x.id !== id; });
+          if(persist()){ d.el.close(); openNoteLibrary(); app.toast('笔记已删除'); renderStudyNoteEntry(); }
+        });
+        return;
+      }
       if(jump){ const n = data.notes.find(function(x){ return x.id === jump.dataset.jump; }); if(n){ d.el.close(); openReference(n.reference); } }
     });
   }
