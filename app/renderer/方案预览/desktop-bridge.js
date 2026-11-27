@@ -60,8 +60,13 @@
       '<p id="deskLanState" style="font-size:13px;color:var(--ink-2,#5b5b5b);margin:0 0 12px">正在启动…</p>' +
       '<div style="display:flex;gap:18px;align-items:center;flex-wrap:wrap"><img id="deskLanQr" alt="局域网二维码" style="width:200px;height:200px;border-radius:10px;border:1px solid var(--line,#e5e0d4)" />' +
       '<div style="font-size:13px;line-height:1.9"><div id="deskLanUrl" style="font-family:ui-monospace,Consolas,monospace"></div>' +
-      '<button id="deskLanCopy" class="btn btn-sm" type="button" style="margin-top:10px">复制地址</button></div></div>' +
-      '<p style="font-size:12px;color:var(--ink-3,#8a8a8a);margin:10px 0 0">手机与电脑连同一个 WiFi，扫码打开即可看书、听课、查卦例；手机上暂不可改数据。</p>');
+      '<div id="deskLanPair" style="margin-top:6px"></div>' +
+      '<button id="deskLanRegen" class="btn btn-sm" type="button" style="margin-top:10px">重生成配对码</button>' +
+      '<button id="deskLanCopy" class="btn btn-sm" type="button" style="margin-top:10px;margin-left:6px">复制地址</button></div></div>' +
+      '<p id="deskLanAudit" style="font-size:12px;color:var(--ink-3,#8a8a8a);margin:8px 0 0"></p>' +
+      '<p id="deskMobileState" style="font-size:13px;color:var(--ink-2,#5b5b5b);margin:8px 0 0"></p>' +
+      '<button id="deskMobileMerge" class="btn btn-sm" type="button" style="margin-top:8px">合并手机提交</button>' +
+      '<p style="font-size:12px;color:var(--ink-3,#8a8a8a);margin:10px 0 0">手机与电脑连同一个 WiFi，扫码打开即可看书、听课；手机端只读。链接含长 token，配对码 5 分钟内一次性有效。</p>');
     lan.id = 'deskLanCard';
     host.appendChild(lan);
 
@@ -73,6 +78,16 @@
       '<p style="font-size:12px;color:var(--ink-3,#8a8a8a);margin:10px 0 0">检查更新会读取 GitHub Releases；没有新版会提示已是最新。</p>');
     upd.id = 'deskUpdateCard';
     host.appendChild(upd);
+    var mediaCard = card('<h2 style="font-size:16px;letter-spacing:.1em;margin:0 0 10px">媒体库</h2>' +
+      '<p id="deskMediaState" style="font-size:13px;color:var(--ink-2,#5b5b5b);margin:0 0 8px">正在读取媒体库…</p>' +
+      '<p id="deskMediaPath" style="font-size:12px;color:var(--ink-3,#8a8a8a);margin:0 0 10px;word-break:break-all"></p>' +
+      '<div style="display:flex;gap:10px;flex-wrap:wrap"><button id="deskMediaChoose" class="btn btn-primary btn-sm" type="button">选择媒体文件夹</button>' +
+      '<button id="deskMediaScan" class="btn btn-sm" type="button">重新扫描</button>' +
+      '<button id="deskMediaReveal" class="btn btn-sm" type="button">打开文件夹</button></div>' +
+      '<p style="font-size:12px;color:var(--ink-3,#8a8a8a);margin:10px 0 0">媒体文件不随安装包分发。换机后把 221录音课 / 含删除课程 等文件夹放到新位置，在这里选一次根目录即可；缺失文件会在课时里标出。</p>');
+    mediaCard.id = 'deskMediaCard';
+    host.appendChild(mediaCard);
+
 
     function refreshData() {
       if (typeof desktop.dataStatus !== 'function') return;
@@ -93,6 +108,16 @@
         if (st) st.textContent = '已开启：手机扫码打开';
         if (url) url.textContent = info.url || '';
         if (img && info.qr) img.src = info.qr;
+        var pair = document.getElementById('deskLanPair');
+        if (pair && info.pairCode) {
+          var mins = Math.max(1, Math.round(((info.pairExpires || 0) - Date.now()) / 60000));
+          pair.textContent = '手动配对码：' + info.pairCode + '（' + mins + ' 分钟内有效，只用一次）';
+        }
+        var auditEl = document.getElementById('deskLanAudit');
+        if (auditEl) {
+          var f = info.auditFailures || [];
+          auditEl.textContent = f.length ? '最近被拒 ' + f.length + ' 次：' + f.slice(-3).map(function (a) { return a.status + ' ' + (a.reason || ''); }).join('；') : '最近没有被拒记录。';
+        }
       }).catch(function () {});
     }
     document.getElementById('deskImport').addEventListener('click', function () {
@@ -101,11 +126,159 @@
       });
     });
     document.getElementById('deskReload').addEventListener('click', function () { location.reload(); });
+    document.getElementById('deskLanRegen') && document.getElementById('deskLanRegen').addEventListener('click', function () {
+      if (typeof desktop.lanRegenPair !== 'function') return;
+      desktop.lanRegenPair().then(function () { refreshLan(); }).catch(function () {});
+    });
     document.getElementById('deskLanCopy').addEventListener('click', function () {
       var t = document.getElementById('deskLanUrl');
       if (t && navigator.clipboard) navigator.clipboard.writeText(t.textContent || '').catch(function () {});
     });
     refreshData(); refreshLan();
+    function refreshMedia() {
+      if (typeof desktop.mediaInfo !== 'function') return;
+      desktop.mediaInfo().then(function (m) {
+        var st = document.getElementById('deskMediaState');
+        var pathEl = document.getElementById('deskMediaPath');
+        if (st) {
+          if (!m || !m.ok) st.textContent = '媒体索引缺失，无法扫描。';
+          else if (m.missingCount === 0) st.textContent = '媒体库完整：' + m.present + ' / ' + m.total + ' 个文件，约 ' + Math.round(m.bytes / 1024 / 1024 / 1024 * 10) / 10 + ' GB。';
+          else st.textContent = '缺失 ' + m.missingCount + ' / ' + m.total + ' 个文件' + (m.missingByKind ? '（' + Object.keys(m.missingByKind).map(function (k) { return k + ' ' + m.missingByKind[k]; }).join('、') + '）' : '') + '，请选择媒体文件夹或补齐文件。';
+        }
+        if (pathEl) pathEl.textContent = m ? '当前根目录：' + (m.root || '未设置') : '';
+      }).catch(function () {});
+    }
+    function bindMedia() {
+      var choose = document.getElementById('deskMediaChoose');
+      var scan = document.getElementById('deskMediaScan');
+      var reveal = document.getElementById('deskMediaReveal');
+      if (choose) choose.addEventListener('click', function () {
+        if (typeof desktop.chooseMediaRoot !== 'function') return;
+        desktop.chooseMediaRoot().then(function () { refreshMedia(); }).catch(function () {});
+      });
+      if (scan) scan.addEventListener('click', function () {
+        if (typeof desktop.rescanMedia !== 'function') return;
+        var st = document.getElementById('deskMediaState');
+        if (st) st.textContent = '正在扫描…';
+        desktop.rescanMedia().then(function () { refreshMedia(); }).catch(function () {});
+      });
+      if (reveal) reveal.addEventListener('click', function () {
+        if (typeof desktop.revealMediaRoot === 'function') desktop.revealMediaRoot().catch(function () {});
+      });
+    }
+    refreshMedia(); bindMedia();
+    (function mobileWrite() {
+      if (typeof desktop.lanPushCases !== 'function') return;
+      var push = function () {
+        try { if (window.CCaseSummaries) desktop.lanPushCases(window.CCaseSummaries()); } catch (e) {}
+      };
+      push();
+      setInterval(push, 10000);
+    })();
+    function refreshMobile() {
+      if (typeof desktop.mobileList !== 'function') return;
+      desktop.mobileList().then(function (items) {
+        var el = document.getElementById('deskMobileState');
+        if (!el) return;
+        el.textContent = items && items.length ? '手机提交 ' + items.length + ' 条待合并' : '手机提交：暂无';
+      }).catch(function () {});
+    }
+    function bindMobile() {
+      var b = document.getElementById('deskMobileMerge');
+      if (!b) return;
+      b.addEventListener('click', function () {
+        if (typeof desktop.mobileList !== 'function') return;
+        desktop.mobileList().then(function (items) {
+          if (!items || !items.length) return;
+          var n = typeof window.CMobileMerge === 'function' ? window.CMobileMerge(items) : 0;
+          items.forEach(function (it) { desktop.mobileAck(it.id).catch(function () {}); });
+          refreshMobile();
+          var el = document.getElementById('deskMobileState');
+          if (el) el.textContent = '已合并 ' + n + ' 条手机提交';
+        }).catch(function () {});
+      });
+      refreshMobile();
+    }
+    bindMobile();
+    /* 学习资产状态：缺失媒体徽标 + PDF 只读徽标 */
+    function assetBadge(text, title) {
+      var span = document.createElement('span');
+      span.className = 'asset-badge';
+      span.textContent = text;
+      if (title) span.title = title;
+      return span;
+    }
+    function markAssetStatus() {
+      if (!window.desktop || typeof desktop.mediaInfo !== 'function') return;
+      desktop.mediaInfo().then(function (m) {
+        if (!m || !m.ok) return;
+        var miss = {};
+        (m.missing || []).forEach(function (rel) { var p = String(rel).split('/'); miss[p[p.length - 1]] = 1; });
+        var base = function (src) {
+          try { var u = decodeURIComponent(String(src || '')); return u.split('/').pop().split('?')[0]; } catch (e) { return ''; }
+        };
+        document.querySelectorAll('#audioList .audio-item[data-audio-src]').forEach(function (item) {
+          var name = base(item.getAttribute('data-audio-src'));
+          var hit = name && miss[name];
+          item.classList.toggle('is-missing-media', !!hit);
+          if (hit && !item.querySelector('.asset-badge')) item.appendChild(assetBadge('缺', '本地找不到这个录音文件；去设置→媒体库选根目录或补齐文件'));
+        });
+        document.querySelectorAll('#imageGrid .lesson-card').forEach(function (card) {
+          var lessonId = card.querySelector('[data-lesson]') ? card.querySelector('[data-lesson]').dataset.lesson : '';
+          var lesson = (window.LESSONS || []).filter(function (x) { return String(x.n) === String(lessonId); })[0];
+          var srcs = lesson ? [lesson.audio, lesson.img] : [];
+          var hit = srcs.some(function (u) { var n = base(u); return n && miss[n]; });
+          if (hit) {
+            card.classList.add('is-missing-media');
+            if (!card.querySelector('.asset-badge')) card.appendChild(assetBadge('缺', '这节课的录音或讲解图在本地缺失'));
+          }
+        });
+        document.querySelectorAll('[data-book-open]').forEach(function (card) {
+          var id = card.dataset.bookOpen;
+          var lib = (window.LIUYAO_LIBRARY && window.LIUYAO_LIBRARY.books) || [];
+          var book = lib.filter(function (x) { return x.id === id; })[0];
+          if (book && String(book.ext || '').toLowerCase() === 'pdf' && !card.querySelector('.asset-badge')) {
+            var badge = assetBadge('PDF 只读', '点击在应用内只读打开（不引入 pdf.js，使用系统 PDF 查看器）');
+            badge.style.cursor = 'pointer';
+            badge.addEventListener('click', function (ev) {
+              ev.preventDefault(); ev.stopPropagation();
+              if (typeof desktop.openPdfInApp !== 'function') return;
+              var base = (window.LIUYAO_LIBRARY && window.LIUYAO_LIBRARY.base) || '../05_书房/';
+              var href;
+              try { href = new URL(base + book.file, location.href).href; } catch (e) { href = base + book.file; }
+              desktop.openPdfInApp(href).then(function (r) {
+                if (r && r.ok === false) setStatus('PDF 打开失败：' + (r.error || '文件缺失'));
+              }).catch(function () { setStatus('PDF 打开失败'); });
+            });
+            card.appendChild(badge);
+          }
+        });
+      }).catch(function () {});
+    }
+    setInterval(markAssetStatus, 4000);
+    setTimeout(markAssetStatus, 1200);
+
+
+    function mountMediaWarn() {
+      if (!window.desktop || typeof window.desktop.mediaInfo !== 'function') return;
+      desktop.mediaInfo().then(function (m) {
+        if (!m || !m.ok || !m.missingCount) return;
+        if (document.getElementById('deskMediaWarn')) return;
+        var bar = document.createElement('button');
+        bar.id = 'deskMediaWarn';
+        bar.type = 'button';
+        bar.textContent = '媒体缺失 ' + m.missingCount + ' / ' + m.total + '：' + (m.missingByKind ? Object.keys(m.missingByKind).map(function (k) { return k + ' ' + m.missingByKind[k]; }).join('、') : '') + ' · 点这里去设置媒体文件夹';
+        bar.style.cssText = 'position:fixed;left:50%;bottom:18px;transform:translateX(-50%);z-index:150;padding:8px 14px;border-radius:999px;border:1px solid #c9a06a;background:#fdf6e8;color:#7a5a2e;font-size:12px;cursor:pointer;box-shadow:0 6px 18px rgba(0,0,0,.12)';
+        bar.addEventListener('click', function () {
+          var nav = document.querySelector('[data-nav="settings"]');
+          if (nav) nav.click();
+        });
+        document.body.appendChild(bar);
+      }).catch(function () {});
+    }
+    mountMediaWarn();
+
+
     if (document.getElementById('deskCheckUpdate')) {
       desktop.info().then(function (info) {
         var el = document.getElementById('deskVerState');

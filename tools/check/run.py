@@ -52,6 +52,13 @@ for rel in ["src/index.html", "tools/build/run.py", "LICENSE", "app/renderer/方
     if not (repo / rel).exists():
         fails.append("缺少文件：" + rel)
 
+# 4) 安装包冒烟（有 dist 才跑）
+if node:
+    code, out = run([node, str(repo / "tools" / "check" / "package_smoke.cjs")])
+    print(out.strip()[:200])
+    if code != 0:
+        fails.append("安装包冒烟失败：" + out.strip()[-400:])
+
 print()
 if fails:
     print("FAIL")

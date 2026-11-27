@@ -1,6 +1,6 @@
 {
   "name": "liuyao-shufang",
-  "version": "0.5.3",
+  "version": "0.6.0",
   "private": true,
   "description": "六爻书房 · 本地六爻学习与排盘工作台",
   "author": "易寒",
@@ -26,6 +26,9 @@
       "main.js",
       "preload.js",
       "lan.js",
+      "pdf-view.js",
+      "mobile-inbox.js",
+      "media-library.js",
       "renderer/**",
       "!renderer/方案预览/A.css",
       "!renderer/方案预览/B.css",

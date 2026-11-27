@@ -4835,6 +4835,7 @@ html.rail-min .theme-dot:hover::after,html.rail-min .theme-dot:focus-visible::af
               <button role="tab" data-mode="program" aria-selected="true" aria-controls="paneProgram" id="modeTabProgram" tabindex="0">程序摇卦</button>
               <button role="tab" data-mode="manual" aria-selected="false" aria-controls="paneManual" id="modeTabManual" tabindex="-1">逐爻录入</button>
               <button role="tab" data-mode="pick" aria-selected="false" aria-controls="panePick" id="modeTabPick" tabindex="-1">直接选卦</button>
+              <button type="button" class="btn btn-sm" id="otherCastBtn" title="时间 / 数字 / 报数 / 外应">其它起卦法</button>
             </div>
 
             <div class="mode-pane" data-pane="program" id="paneProgram" role="tabpanel" aria-labelledby="modeTabProgram">
@@ -4937,6 +4938,14 @@ html.rail-min .theme-dot:hover::after,html.rail-min .theme-dot:focus-visible::af
                 <input type="datetime-local" id="castWhen" aria-label="起卦时间">
               </div>
               <div class="cast-time-meta" id="castAstro">月建 — · 日辰 — · 旬空 —</div>
+              <div class="cast-astro-opts">
+                <label class="c-check"><input type="checkbox" id="castTrueSolar"> 真太阳时</label>
+                <span id="castLonWrap" hidden><input id="castLon" type="number" min="70" max="140" step="0.1" value="120" aria-label="当地经度" inputmode="decimal"> °E</span>
+                <select id="castZiMode" aria-label="子时换日口径">
+                  <option value="23">子时 23:00 换日</option>
+                  <option value="00">子时 00:00 换日</option>
+                </select>
+              </div>
               <button class="switch cast-manual-toggle" id="castManualToggle" aria-pressed="false" title="手动输入月建与日辰">
                 <span class="switch-track" aria-hidden="true"></span><span>手动改月建 / 日辰</span>
               </button>
@@ -5035,7 +5044,7 @@ html.rail-min .theme-dot:hover::after,html.rail-min .theme-dot:focus-visible::af
             <p class="sub">主题、背景、字体、同步与更新</p>
 
           </div>
-          <div class="view-head-side">本机存储<br>App <span class="num">v0.5.3</span></div>
+          <div class="view-head-side">本机存储<br>App <span class="num">v0.6.0</span></div>
         </div>
         <div class="settings-grid">
           <div class="set-col">
@@ -5185,7 +5194,7 @@ html.rail-min .theme-dot:hover::after,html.rail-min .theme-dot:focus-visible::af
             <p>自动检查</p>
             </div>
             <div class="version-line">
-            <span class="v">v0.5.3</span>
+            <span class="v">v0.6.0</span>
             <span class="tag">2026-11-23</span>
             </div>
             <div class="update-actions">
@@ -5372,7 +5381,7 @@ window.CBookEdits = (function () {
 /* v6.2 启动加载：引擎优先（排盘/存卦只等它），书库与媒体清单后台加载；顶部细条提示 */
 (function () {
   var ENGINE_DEPS = ['vendor/liuyao.js'];
-  var DATA_DEPS = ['data/books.js', 'data/media.js', 'data/lessons-manifest.js'];
+  var DATA_DEPS = ['data/books.js', 'data/media.js', 'data/lessons-manifest.js', 'data/media-index.js'];
 
   var bar = document.createElement('div');
   bar.id = 'cLoadBar';
@@ -5514,14 +5523,28 @@ window.CBookEdits = (function () {
     arr.unshift(cat);
     try { localStorage.setItem(CAT_KEY, JSON.stringify(arr.slice(0, 30))); } catch (err) { /* noop */ }
   }
+  function mediaRoot() {
+    try { if (window.desktop && window.desktop.mediaRoot) return String(window.desktop.mediaRoot); } catch (e) {}
+    if (window.__MEDIA_ROOT) return String(window.__MEDIA_ROOT);
+    try { if (window.MEDIA_INDEX && window.MEDIA_INDEX.root) return window.MEDIA_INDEX.root; } catch (e) {}
+    return 'D:/BaiduNetdiskDownload';
+  }
+  function mediaFileURL(root, rel) {
+    root = String(root || '').replace(/\\/g, '/').replace(/\/+$/, '');
+    rel = String(rel || '').replace(/^\/+/, '');
+    var full = (root ? root + '/' : '') + rel;
+    try { return 'file:///' + encodeURI(full); } catch (e) { return 'file:///' + full; }
+  }
   function mediaPath(p) {
-    /* 统一素材路径：绝对盘符（D:/…）→ file:/// 直连；http(s)/file 原样；其余按应用 base 拼接 */
     if (!p) return '';
     p = String(p);
+    if (p.slice(0, 8) === 'media://') return mediaFileURL(mediaRoot(), p.slice(8));
     if (/^https?:\/\//i.test(p) || /^file:\/\//i.test(p)) return p;
     if (/^[A-Za-z]:[\/\\]/.test(p)) return 'file:///' + p.replace(/\\/g, '/');
     return fileURL(p);
   }
+  window.CMediaRoot = mediaRoot;
+  window.CMediaPath = mediaPath;
   var DEMO_TEXT = '易与天地准，故能弥纶天地之道。仰以观于天文，俯以察于地理，是故知幽明之故；原始反终，故知死生之说。\n' +
     '是故刚柔相摩，八卦相荡。鼓之以雷霆，润之以风雨；日月运行，一寒一暑。\n' +
     '乾知大始，坤作成物。乾以易知，坤以简能；易则易知，简则易从。\n' +
@@ -5591,6 +5614,98 @@ window.CBookEdits = (function () {
   /* ===== 真排盘引擎（vendor/liuyao.js，本地引入，无外链） ===== */
   var ENGINE = window.LiuYaoNS || window.LiuYao || null;
   var CASE_KEY = 'liuyao.cases.v1';
+  /* ===== 卦例库：IndexedDB 主存 + 内存镜像 ===== */
+  var CCaseStore = (function () {
+    var DB = 'liuyao-cases', STORE = 'cases', dbp = null, ready = false, failed = false;
+    function open() {
+      if (dbp) return dbp;
+      dbp = new Promise(function (resolve, reject) {
+        if (!window.indexedDB) { reject(new Error('IndexedDB 不可用')); return; }
+        var r = indexedDB.open(DB, 1);
+        r.onupgradeneeded = function () { if (!r.result.objectStoreNames.contains(STORE)) r.result.createObjectStore(STORE, { keyPath: 'id' }); };
+        r.onsuccess = function () { resolve(r.result); };
+        r.onerror = function () { reject(r.error || new Error('无法打开卦例库')); };
+      });
+      return dbp;
+    }
+    function tx(mode, fn) {
+      return open().then(function (d) {
+        return new Promise(function (resolve, reject) {
+          var t = d.transaction(STORE, mode), st = t.objectStore(STORE), out;
+          try { out = fn(st); } catch (e) { try { t.abort(); } catch (x) {} reject(e); return; }
+          t.oncomplete = function () { resolve(out && out.result !== undefined ? out.result : out); };
+          t.onerror = function () { reject(t.error || new Error('卦例库写入失败')); };
+          t.onabort = function () { reject(t.error || new Error('卦例库操作取消')); };
+        });
+      });
+    }
+    function loadAll() { return tx('readonly', function (st) { return st.getAll(); }).then(function (rows) { return rows || []; }); }
+    function saveAll(list) {
+      var arr = Array.isArray(list) ? list : [];
+      /* 内存对象可能带不可克隆字段：先序列化净化，避免 DataCloneError */
+      try { arr = JSON.parse(JSON.stringify(arr)); } catch (e) { arr = []; }
+      return open().then(function (d) {
+        return new Promise(function (resolve, reject) {
+          var t = d.transaction(STORE, 'readwrite'), store = t.objectStore(STORE);
+          try { store.clear(); arr.forEach(function (c) { if (c && c.id) store.put(c); }); }
+          catch (e) { try { t.abort(); } catch (x) {} reject(e); return; }
+          t.oncomplete = function () { resolve(arr.length); };
+          t.onerror = function () { reject(t.error || new Error('卦例库写入失败')); };
+          t.onabort = function () { reject(t.error || new Error('卦例库操作取消')); };
+        });
+      });
+    }
+    function count() { return tx('readonly', function (st) { return st.count(); }); }
+    return {
+      open: open, loadAll: loadAll, saveAll: saveAll, count: count,
+      isReady: function () { return ready; },
+      isFailed: function () { return failed; },
+      markFailed: function () { failed = true; },
+      markReady: function () { ready = true; }
+    };
+  })();
+  window.CCaseStore = CCaseStore;
+  window.CCaseJSON = function () { return JSON.stringify(state.cases || []); };
+  window.CCaseSummaries = function () {
+    return (state.cases || []).map(function (c) {
+      return { id: c.id, q: c.q, cat: c.cat, date: c.date, hex: c.hex };
+    });
+  };
+  window.CMobileMerge = function (items) {
+    var applied = 0;
+    (items || []).forEach(function (it) {
+      if (!it || !it.text) return;
+      if (it.kind === 'newPending') {
+        var q = document.querySelector('#castQuestion');
+        if (q && !q.value.trim()) { q.value = it.text; q.dispatchEvent(new Event('input', { bubbles: true })); }
+        var nav = document.querySelector('[data-nav="cast"]');
+        if (nav) nav.click();
+        toast('手机提交的占问已放入排盘页，请起卦');
+        applied++;
+        return;
+      }
+      if (!it.caseId) return;
+      var c = (state.cases || []).filter(function (x) { return x.id === it.caseId; })[0];
+      if (!c) return;
+      var stamp = '手机提交 ' + new Date(it.at || Date.now()).toLocaleString('zh-CN', { hour12: false });
+      if (it.kind === 'review') c.reviewNote = (c.reviewNote ? c.reviewNote + '\n' : '') + '[' + stamp + '] ' + it.text;
+      else c.result = (c.result ? c.result + '\n' : '') + '[' + stamp + '] ' + it.text;
+      applied++;
+    });
+    if (applied) {
+      try { saveCases(); } catch (e) {}
+      try { updateCaseTotals(); renderCaseList(); } catch (e) {}
+      if (state.caseOpenId) {
+        var cur = (state.cases || []).filter(function (x) { return x.id === state.caseOpenId; })[0];
+        if (cur) try { renderCaseDetail(cur); } catch (e) {}
+      }
+    }
+    return applied;
+  };
+  window.CSaveCasesNow = function (list) {
+    if (window.CCaseStore) return CCaseStore.saveAll(list);
+    try { localStorage.setItem(CASE_KEY, JSON.stringify(list)); return Promise.resolve(); } catch (e) { return Promise.reject(e); }
+  };
   var ASTRO_RULE = 'exact-2026-11';
   var astroMigrateState = { running: false, failed: false, done: false, lastCount: 0, lastError: '' };
   var LINE_TEXT = { old_yang: '老阳', young_yang: '少阳', young_yin: '少阴', old_yin: '老阴' };
@@ -5704,8 +5819,24 @@ window.CBookEdits = (function () {
     return STEM10.charAt(si) + br;
   }
 
-  function computeAstro(date) {
+  function solarEotMinutes(d) {
+    /* 均时差近似（分钟），误差约 ±30 秒；学习用途 */
+    var start = new Date(d.getFullYear(), 0, 0);
+    var n = Math.floor((d - start) / 86400000);
+    var B = 2 * Math.PI * (n - 81) / 364;
+    return 9.87 * Math.sin(2 * B) - 7.53 * Math.cos(B) - 1.5 * Math.sin(B);
+  }
+  function computeAstro(date, opts) {
+    opts = opts || (typeof state === 'object' && state.astroOptions) || {};
     var d = date instanceof Date && !isNaN(date.getTime()) ? date : new Date();
+    var trueSolar = null;
+    if (opts.trueSolar) {
+      var lon = Number(opts.longitude);
+      if (!isFinite(lon)) lon = 120;
+      var offset = (lon - 120) * 4 + solarEotMinutes(d);
+      d = new Date(d.getTime() + offset * 60000);
+      trueSolar = { longitude: lon, offset: Math.round(offset) };
+    }
     if (!ENGINE) {
       return { year: '—', month: '—', day: '—', hour: '—', monthJian: '—', xunkong: '—', solarDate: '', lunarDate: '' };
     }
@@ -5716,7 +5847,7 @@ window.CBookEdits = (function () {
       var lunar = beijingSolar(d).getLunar();
       year = lunar.getYearInGanZhiExact() + '年';
       month = lunar.getMonthInGanZhiExact() + '月';
-      day = lunar.getDayInGanZhiExact() + '日'; /* 23:00 起按次日（Exact 的晚子时口径） */
+      day = (opts.ziMode === '00' ? lunar.getDayInGanZhi() : lunar.getDayInGanZhiExact()) + '日'; /* 23:00 起按次日（Exact 的晚子时口径） */
       hour = lunar.getTimeInGanZhi() + '时';
       xk = xunkongOfDay(String(day).replace(/日$/, ''));
     } catch (e) {
@@ -5727,7 +5858,8 @@ window.CBookEdits = (function () {
       monthJian: String(month).replace(/月$/, ''),
       xunkong: xk,
       solarDate: a.solarDate || '', lunarDate: a.lunarDate || '',
-      dayPlain: String(day).replace(/日$/, '')
+      dayPlain: String(day).replace(/日$/, ''),
+      trueSolar: trueSolar, ziMode: opts.ziMode || '23'
     };
   }
 
@@ -7020,12 +7152,20 @@ window.CBookEdits = (function () {
     var raw = (key === 'demo' ? state.reading.demo : state.reading.items[key]) || {};
     return {page:CCore.findAnchorPage(R5.pages, raw.anchor, raw.page),pct:raw.pct||0,anchor:raw.anchor||null};
   }
+  function glyphHTML(html) {
+    /* ▅ 在阅读字体里缺字会变黑块；换成 CSS 爻线 */
+    return String(html)
+      .replace(/▅▅▅▅▅/g, '<i class="hx-line hx-yang" aria-label="阳爻"></i>')
+      .replace(/▅▅ ▅▅/g, '<i class="hx-line hx-yin" aria-label="阴爻"></i>')
+      .replace(/▅/g, '<i class="hx-line hx-yang" aria-label="阳爻"></i>');
+  }
   function pageParasHTML(paras, heads, page) {
     var hs = heads || [];
     function paraHTML(p) {
       var t = p.trim();
       if (hs.indexOf(t) >= 0) return '<div class="chap-h">' + esc(t) + '</div>';
-      return '<p>' + esc(t) + '</p>';
+      if ((t.match(/▅/g) || []).length >= 3) return '<p class="book-tbl">' + glyphHTML(esc(t)) + '</p>';
+      return '<p>' + glyphHTML(esc(t)) + '</p>';
     }
     if (page && page.flow && page.flow.length && window.CCore && CCore.chartHTML) {
       return page.flow.map(function (f) {
@@ -7547,7 +7687,7 @@ window.CBookEdits = (function () {
     }
     else if (route === 'cast') text = '纳甲排盘 · ' + (state.cast.ctx ? state.cast.ctx.day : '当前时间');
     else if (route === 'case') text = '共 ' + allCases().length + ' 条 · 待回访 ' + caseCounts().revisit;
-    else text = '本机存储 · 版本 v0.5.3';
+    else text = '本机存储 · 版本 v0.6.0';
     el.textContent = text;
   }
 
@@ -8212,7 +8352,8 @@ window.CBookEdits = (function () {
     out.push('抽屉容器 Shift+Tab 留在抽屉=' + shiftOk);
     if (!shiftOk) failures.push('抽屉容器 Shift+Tab 逃出抽屉');
     var tocCloseH = Math.round($('#tocClose').getBoundingClientRect().height);
-    var segW = Math.round(document.querySelector('.rv5-seg button').getBoundingClientRect().width);
+    var segBtnEl = document.querySelector('.rv5-seg button');
+    var segW = segBtnEl && segBtnEl.getClientRects().length ? Math.round(segBtnEl.getBoundingClientRect().width) : 44;
     var fpRole = $('#fontPop').getAttribute('role');
     out.push('tocClose=' + tocCloseH + 'px / rv5-seg 宽=' + segW + ' / fontPop role=' + fpRole);
     if (tocCloseH < 44) failures.push('抽屉关闭按钮小于 44px');
@@ -8383,8 +8524,10 @@ window.CBookEdits = (function () {
       var pdfBtn = $('#pdfOpenBtn');
       var rbtn = $('#tocBtn');
       if (rbtn && rbtn.getBoundingClientRect().height < 43.5) failures.push('手机阅读工具热区小于 44px');
-      var chipH = Math.round(($('#syncChip') || $('#bgQuick')).getBoundingClientRect().height);
-      if (chipH < 44) failures.push('手机顶栏 chip 小于 44px（' + chipH + '）');
+      var chipEl = $('#syncChip');
+      if (!chipEl || !chipEl.getClientRects().length) chipEl = $('#bgQuick');
+      var chipH = chipEl && chipEl.getClientRects().length ? Math.round(chipEl.getBoundingClientRect().height) : 0;
+      if (chipEl && chipEl.getClientRects().length && chipH < 44) failures.push('手机顶栏 chip 小于 44px（' + chipH + '）');
       applyTheme('jiangnan', { silent: true });
       setRain(true);
       var rainAnim = getComputedStyle($('#bgRain')).animationName;
@@ -8605,7 +8748,7 @@ window.CBookEdits = (function () {
   }
   function castContext() {
     var date = castDate();
-    var auto = computeAstro(date);
+    var auto = computeAstro(date, state.astroOptions);
     var month = auto.monthJian, day = auto.dayPlain, xk = auto.xunkong;
     var monthManual = false, dayManual = false;
     if (state.cast.manualDate) {
@@ -8628,7 +8771,9 @@ window.CBookEdits = (function () {
       xunkong: xk,
       dayPlain: day,
       solarDate: auto.solarDate || '',
-      lunarDate: auto.lunarDate || ''
+      lunarDate: auto.lunarDate || '',
+      trueSolar: auto.trueSolar || null,
+      ziMode: auto.ziMode || '23'
     };
     return {
       date: date, astro: auto, effectiveAstro: effectiveAstro, hourPillar: hourPillar,
@@ -8689,7 +8834,7 @@ window.CBookEdits = (function () {
     var ctx = castContext();
     state.cast.ctx = ctx;
     var astroEl = $('#castAstro');
-    if (astroEl) astroEl.textContent = '四柱 ' + astroPillars(ctx) + ' · 月建 ' + ctx.month + (ctx.monthManual ? '（手动）' : '') + ' · 日辰 ' + ctx.day + (ctx.dayManual ? '（手动）' : '') + ' · 旬空 ' + ctx.xunkong;
+    if (astroEl) astroEl.textContent = '四柱 ' + astroPillars(ctx) + ' · 月建 ' + ctx.month + (ctx.monthManual ? '（手动）' : '') + ' · 日辰 ' + ctx.day + (ctx.dayManual ? '（手动）' : '') + ' · 旬空 ' + ctx.xunkong + (ctx.astro && ctx.astro.trueSolar ? ' · 真太阳时校正 ' + ctx.astro.trueSolar.offset + ' 分' : '') + (ctx.astro && ctx.astro.ziMode === '00' ? ' · 00:00 换日' : '');
     validateManual();
     var dl = $('#castDayline');
     if (dl) dl.innerHTML = '本日公历 <b>' + esc(ctx.astro.solarDate || '—') + '</b> · 黄历 <b>' + esc(ctx.astro.lunarDate || '—') + '</b>';
@@ -8950,7 +9095,79 @@ window.CBookEdits = (function () {
   function starHitCount(stars) {
     return (stars || []).reduce(function (a, s) { return a + ((s.hits && s.hits.length) || 0); }, 0);
   }
+  /* ===== 规则集 / 师承：神煞集合切换（默认《古筮真诠》十三神煞） ===== */
+  var RULESET_KEY = 'liuyao.ruleset.v1';
+  var STAR_ALL = ['贵人', '禄神', '羊刃', '文昌', '驿马', '桃花', '将星', '华盖', '谋星', '劫煞', '灾煞', '天医', '天喜'];
+  var RULESET_PRESETS = {
+    gushi: { label: '古筮真诠 · 十三神煞', stars: STAR_ALL.slice(), source: '《古筮真诠》神煞篇：以日干起贵人、禄神、羊刃、文昌，以日支起驿马、桃花、将星、华盖、谋星、劫煞、灾煞，月支定天医、天喜。' },
+    jian: { label: '精简 · 八神煞', stars: ['贵人', '禄神', '羊刃', '文昌', '驿马', '桃花', '将星', '华盖'], source: '只保留最常用的八项，便于初学者抓重点；其余五项仍可在自定义里打开。' },
+    custom: { label: '自定义', stars: STAR_ALL.slice(), source: '逐项勾选；勾选结果随卦例记录，便于日后对照不同口径。' }
+  };
+  function rulesetGet() {
+    var def = { preset: 'gushi', enabled: STAR_ALL.slice() };
+    try {
+      var raw = JSON.parse(localStorage.getItem(RULESET_KEY) || 'null');
+      if (raw && raw.preset && RULESET_PRESETS[raw.preset]) {
+        def.preset = raw.preset;
+        if (Array.isArray(raw.enabled)) def.enabled = raw.enabled.filter(function (x) { return STAR_ALL.indexOf(x) >= 0; });
+        if (!def.enabled.length) def.enabled = STAR_ALL.slice();
+      }
+    } catch (e) {}
+    return def;
+  }
+  function rulesetSet(preset, enabled) {
+    var next = { preset: RULESET_PRESETS[preset] ? preset : 'custom', enabled: (enabled || []).filter(function (x) { return STAR_ALL.indexOf(x) >= 0; }) };
+    if (!next.enabled.length) next.enabled = STAR_ALL.slice();
+    try { localStorage.setItem(RULESET_KEY, JSON.stringify(next)); } catch (e) {}
+    if (state.cast.built) { try { renderPlate(); } catch (e) {} }
+    if (state.caseOpenId) {
+      var cur = allCases().filter(function (c) { return c.id === state.caseOpenId; })[0];
+      if (cur) renderCaseDetail(cur);
+    }
+    return next;
+  }
+  function rulesetActive(name) { return rulesetGet().enabled.indexOf(name) >= 0; }
+  function filterStars(stars) {
+    var enabled = rulesetGet().enabled;
+    return (stars || []).filter(function (s) { return enabled.indexOf(s.name) >= 0; });
+  }
+  window.CRuleSet = { all: STAR_ALL.slice(), presets: RULESET_PRESETS, get: rulesetGet, set: rulesetSet, filter: filterStars };
+
+  function mountRulesetCard() {
+    var view = document.querySelector('#view-settings'); if (!view || document.querySelector('#cRulesetCard')) return;
+    var cur = rulesetGet();
+    var card = document.createElement('section');
+    card.id = 'cRulesetCard'; card.className = 'panel set-block';
+    card.innerHTML = '<div class="set-head"><h2>规则集与出处</h2><p>神煞按哪一套算、为什么这么算</p></div>' +
+      '<label for="rulesetPreset">规则集</label><select id="rulesetPreset">' +
+      Object.keys(RULESET_PRESETS).map(function (k) { return '<option value="' + k + '"' + (cur.preset === k ? ' selected' : '') + '>' + RULESET_PRESETS[k].label + '</option>'; }).join('') +
+      '</select>' +
+      '<div class="ruleset-stars" id="rulesetStars">' + STAR_ALL.map(function (n) {
+        return '<label class="c-check ruleset-item"><input type="checkbox" value="' + n + '"' + (cur.enabled.indexOf(n) >= 0 ? ' checked' : '') + '> ' + n + '</label>';
+      }).join('') + '</div>' +
+      '<p class="ruleset-source" id="rulesetSource">' + (RULESET_PRESETS[cur.preset] || RULESET_PRESETS.gushi).source + '</p>' +
+      '<p class="c-muted" style="font-size:12px">切换只影响盘面与卦例的显示；已存卦例的数据不改写，详情里记录当时的规则集。</p>';
+    view.appendChild(card);
+    var sel = card.querySelector('#rulesetPreset');
+    var box = card.querySelector('#rulesetStars');
+    sel.addEventListener('change', function () {
+      var preset = RULESET_PRESETS[sel.value] || RULESET_PRESETS.gushi;
+      rulesetSet(sel.value, preset.stars);
+      box.querySelectorAll('input').forEach(function (i) { i.checked = preset.stars.indexOf(i.value) >= 0; });
+      var src = card.querySelector('#rulesetSource'); if (src) src.textContent = preset.source;
+      toast('规则集已切换：' + preset.label);
+    });
+    box.addEventListener('change', function () {
+      var enabled = [...box.querySelectorAll('input:checked')].map(function (i) { return i.value; });
+      rulesetSet('custom', enabled);
+      sel.value = 'custom';
+      var src = card.querySelector('#rulesetSource'); if (src) src.textContent = RULESET_PRESETS.custom.source;
+      toast('神煞已自定义');
+    });
+  }
+
   function starRowsHTML(stars) {
+    stars = filterStars(stars);
     /* v6.1 P2：十三星煞两行紧凑式保留列表语义（ul/li + aria-label） */
     if (!stars || !stars.length) return '';
     return '<ul class="star-list6" role="list" aria-label="十三星煞">' + stars.map(function (s) {
@@ -9648,6 +9865,7 @@ window.CBookEdits = (function () {
     clearCastTimer();
     c.manualDate = false;
     c.yongShen = null;
+    c.method = null;
     c.manualMonth = '';
     c.manualDay = '';
     c.whenManual = false;
@@ -9774,6 +9992,114 @@ window.CBookEdits = (function () {
     toast('六爻已录入 · 点右侧「确定起卦」生成完整卦体');
   }
 
+  /* ===== 其它起卦法：时间 / 数字 / 报数 / 外应 ===== */
+  var BAGUA_NUM = [
+    { n: 1, name: '乾', bits: '111' }, { n: 2, name: '兑', bits: '110' },
+    { n: 3, name: '离', bits: '101' }, { n: 4, name: '震', bits: '100' },
+    { n: 5, name: '巽', bits: '011' }, { n: 6, name: '坎', bits: '010' },
+    { n: 7, name: '艮', bits: '001' }, { n: 8, name: '坤', bits: '000' }
+  ];
+  function baguaOf(n) { return BAGUA_NUM[((Number(n) - 1) % 8 + 8) % 8]; }
+  function hexBitsOf(upperN, lowerN) {
+    var up = baguaOf(upperN), lo = baguaOf(lowerN);
+    return lo.bits + up.bits;
+  }
+  function movingOfNumber(n) { return ((Number(n) - 1) % 6 + 6) % 6 + 1; }
+  var ZHI12 = '子丑寅卯辰巳午未申酉戌亥';
+  function lunarNumbers(date) {
+    var lunar = beijingSolar(date instanceof Date ? date : new Date()).getLunar();
+    var yearZhi = String(lunar.getYearInGanZhiExact()).charAt(1);
+    var month = Math.abs(Number(lunar.getMonth())) || 1;
+    var day = Number(lunar.getDay()) || 1;
+    var hourZhi = String(lunar.getTimeZhi()).charAt(0);
+    return {
+      year: Math.max(1, ZHI12.indexOf(yearZhi) + 1), month: month, day: day,
+      hour: Math.max(1, ZHI12.indexOf(hourZhi) + 1),
+      yearZhi: yearZhi, monthCn: month, dayCn: day, hourZhi: hourZhi
+    };
+  }
+  function castByTime(date) {
+    var t = lunarNumbers(date || new Date());
+    var upperSum = t.year + t.month + t.day;
+    var lowerSum = upperSum + t.hour;
+    var upper = ((upperSum - 1) % 8) + 1;
+    var lower = ((lowerSum - 1) % 8) + 1;
+    var moving = movingOfNumber(lowerSum);
+    return {
+      type: 'time', label: '时间起卦',
+      detail: '农历' + t.month + '月' + t.day + '日 ' + t.hourZhi + '时（年支' + t.yearZhi + '）：上卦' + baguaOf(upper).name + '、下卦' + baguaOf(lower).name + '、动' + CN[moving] + '爻',
+      upper: upper, lower: lower, moving: moving, bits: hexBitsOf(upper, lower)
+    };
+  }
+  function castByNumbers(a, b, c) {
+    var x = Number(a), y = Number(b), z = Number(c || 0);
+    if (!isFinite(x) || !isFinite(y) || x <= 0 || y <= 0) throw new Error('数字需为正整数');
+    var upper = ((Math.floor(x) - 1) % 8) + 1;
+    var lower = ((Math.floor(y) - 1) % 8) + 1;
+    var moving = movingOfNumber(Math.floor(x) + Math.floor(y) + Math.floor(z));
+    return {
+      type: 'number', label: '数字起卦',
+      detail: '数字 ' + Math.floor(x) + ' / ' + Math.floor(y) + (z ? ' / ' + Math.floor(z) : '') + '：上卦' + baguaOf(upper).name + '、下卦' + baguaOf(lower).name + '、动' + CN[moving] + '爻',
+      upper: upper, lower: lower, moving: moving, bits: hexBitsOf(upper, lower)
+    };
+  }
+  function castByReport(a, b, c) { var r = castByNumbers(a, b, c); r.type = 'report'; r.label = '报数起卦'; r.detail = r.detail.replace('数字', '报数'); return r; }
+  function castByExternal(text) {
+    var raw = String(text || '').replace(/[\s，。、；：,.!?！？；：'"“”‘’()（）\-—]/g, '');
+    var len = Array.from(raw).length;
+    if (!len) throw new Error('请填写外应内容');
+    var upper = ((Math.ceil(len / 2) - 1) % 8) + 1;
+    var lower = ((Math.max(1, len - Math.ceil(len / 2)) - 1) % 8) + 1;
+    var moving = movingOfNumber(len);
+    return {
+      type: 'external', label: '外应起卦',
+      detail: '外应「' + raw.slice(0, 12) + '」（' + len + ' 字）：上卦' + baguaOf(upper).name + '、下卦' + baguaOf(lower).name + '、动' + CN[moving] + '爻',
+      upper: upper, lower: lower, moving: moving, bits: hexBitsOf(upper, lower)
+    };
+  }
+  function applyCastMethod(meta) {
+    var name = BITS_TO_NAME[meta.bits];
+    if (!name) throw new Error('卦名映射失败');
+    switchCastMode('pick');
+    state.cast.pick = { name: name, moving: [meta.moving] };
+    state.cast.method = { type: meta.type, label: meta.label, detail: meta.detail, bits: meta.bits, moving: meta.moving };
+    updatePickUI();
+    renderCastStage();
+    confirmCast();
+    toast(meta.label + ' · ' + name + ' · ' + CN[meta.moving] + '爻动');
+  }
+  window.CCastMethods = { time: castByTime, numbers: castByNumbers, report: castByReport, external: castByExternal, apply: applyCastMethod, bagua: baguaOf, hexBits: hexBitsOf };
+  function openOtherCastDialog() {
+    var d = CUI.dialog('其它起卦法',
+      '<label for="ocMethod">方法</label><select id="ocMethod">' +
+      '<option value="time">时间起卦（农历年月日时）</option>' +
+      '<option value="number">数字起卦（1–3 个数）</option>' +
+      '<option value="report">报数起卦（随口报数）</option>' +
+      '<option value="external">外应起卦（字数）</option></select>' +
+      '<div id="ocNumber" style="display:none"><label>数字（正数）</label><div style="display:flex;gap:8px"><input id="ocA" type="number" min="1" placeholder="数一" style="flex:1"><input id="ocB" type="number" min="1" placeholder="数二" style="flex:1"><input id="ocC" type="number" min="1" placeholder="数三（可空）" style="flex:1"></div></div>' +
+      '<div id="ocText" style="display:none"><label for="ocTextVal">听到/看到的外应</label><input id="ocTextVal" placeholder="如：窗外三声鸟叫"></div>' +
+      '<p class="c-muted" style="margin-top:6px;font-size:12px">仅生成卦体与动爻，月建日辰仍按打卦时间与历法设置计算。</p>',
+      [{ value: 'cancel', label: '取消' }, { value: 'ok', label: '起卦', primary: true }]);
+    d.result.then(function (res) {
+      if (res.value !== 'ok' || !res.form) return;
+      var method = res.form.querySelector('#ocMethod').value;
+      try {
+        var meta;
+        if (method === 'time') meta = castByTime(new Date());
+        else if (method === 'external') meta = castByExternal(res.form.querySelector('#ocTextVal').value);
+        else {
+          var a = res.form.querySelector('#ocA').value, b = res.form.querySelector('#ocB').value, c = res.form.querySelector('#ocC').value;
+          if (!a || !b) { toast('请填写前两个数字'); return; }
+          meta = method === 'report' ? castByReport(a, b, c) : castByNumbers(a, b, c);
+        }
+        applyCastMethod(meta);
+      } catch (e) { toast(e.message || '起卦失败'); }
+    });
+  }
+
+  document.addEventListener('click', function (e) {
+    if (e.target && e.target.closest && e.target.closest('#otherCastBtn')) { e.preventDefault(); openOtherCastDialog(); }
+  }, true);
   function renderPick() {
     var box = $('#pickGrid');
     if (!box) return;
@@ -9803,6 +10129,7 @@ window.CBookEdits = (function () {
   }
   function setPickName(name) {
     startNewCastIfBuilt();
+    state.cast.method = null;
 
     if (!NAME_TO_BITS[name]) return;
     state.cast.pick.name = name;
@@ -9810,6 +10137,7 @@ window.CBookEdits = (function () {
   }
   function togglePickMove(pos) {
     startNewCastIfBuilt();
+    state.cast.method = null;
 
     var arr = state.cast.pick.moving;
     var i = arr.indexOf(pos);
@@ -9843,6 +10171,8 @@ window.CBookEdits = (function () {
       manualDate: !!built.ctx.manual, manualMonth: built.ctx.monthManual ? built.ctx.month : '',
       manualDay: built.ctx.dayManual ? built.ctx.day : '', ctxHour: built.ctx.hourPillar || '',
       castMode: built.source || 'program', astroRule: 'exact-2026-11',
+      castMethod: state.cast.method ? Object.assign({}, state.cast.method) : null,
+      ruleset: rulesetGet(),
       yongShen: state.cast.yongShen ? Object.assign({}, state.cast.yongShen) : null,
       hex: built.hexName, change: built.changeName || '',
       moveText: built.moveText, movePos: built.move.slice(),
@@ -9930,6 +10260,16 @@ window.CBookEdits = (function () {
       if (xc) exportCaseFile(xc);
       return;
     }
+    if (e.target.closest('[data-case-structured]') && state.caseOpenId) {
+      var sc = allCases().find(function (x) { return x.id === state.caseOpenId; });
+      if (sc) editCaseStructured(sc);
+      return;
+    }
+    if (e.target.closest('[data-case-json]') && state.caseOpenId) {
+      var jc = allCases().find(function (x) { return x.id === state.caseOpenId; });
+      if (jc) exportCaseJson(jc);
+      return;
+    }
     if (e.target.closest('[data-case-recast]') && state.caseOpenId) {
       var rc = allCases().find(function (x) { return x.id === state.caseOpenId; });
       if (rc) reoccupyCase(rc);
@@ -9950,6 +10290,27 @@ window.CBookEdits = (function () {
     if (!row || !state.cast.built) return;
     cycleYongShen(Number(row.dataset.pos));
   });
+
+  function loadAstroOptions() {
+    var def = { trueSolar: false, longitude: 120, ziMode: '23' };
+    try {
+      var raw = JSON.parse(localStorage.getItem('liuyao.astroOpts') || 'null');
+      if (raw && typeof raw === 'object') def = Object.assign(def, raw);
+    } catch (e) {}
+    state.astroOptions = def;
+    return def;
+  }
+  function saveAstroOptions() {
+    try { localStorage.setItem('liuyao.astroOpts', JSON.stringify(state.astroOptions)); } catch (e) {}
+  }
+  function syncAstroOptionUI() {
+    var o = state.astroOptions || {};
+    var cb = $('#castTrueSolar'), lon = $('#castLon'), zi = $('#castZiMode'), wrap = $('#castLonWrap');
+    if (cb) cb.checked = !!o.trueSolar;
+    if (lon) lon.value = o.longitude;
+    if (zi) zi.value = o.ziMode || '23';
+    if (wrap) wrap.hidden = !o.trueSolar;
+  }
 
   window.CResetCast = function () {
     resetCast(false); resetManual();
@@ -10002,6 +10363,22 @@ window.CBookEdits = (function () {
     showLesson:function(item){if(!state.lessonOpen)window.CLessonListScroll=window.scrollY;state.lessonId=null;state.lessonOpen=true;state.readerOpen=false;setRoute('study',{noScroll:true});renderLesson(item);window.scrollTo(0,0);}
   };
   function bindCastControls() {
+    loadAstroOptions();
+    (function bindAstroOpts() {
+      var cb = $('#castTrueSolar'), lon = $('#castLon'), zi = $('#castZiMode');
+      function onChange() {
+        if (!state.astroOptions) state.astroOptions = { trueSolar: false, longitude: 120, ziMode: '23' };
+        state.astroOptions.trueSolar = !!(cb && cb.checked);
+        state.astroOptions.longitude = Number((lon && lon.value) || 120);
+        state.astroOptions.ziMode = (zi && zi.value) || '23';
+        saveAstroOptions(); syncAstroOptionUI(); updateCastTimeUI({});
+        if (state.cast && state.cast.built) toast('时间口径已更新，重新起卦后按新口径出盘');
+      }
+      cb && cb.addEventListener('change', onChange);
+      lon && lon.addEventListener('change', onChange);
+      zi && zi.addEventListener('change', onChange);
+      syncAstroOptionUI();
+    })();
     var when = $('#castWhen');
     if (when) {
       when.value = toLocalInput(state.cast.when);
@@ -10057,11 +10434,20 @@ window.CBookEdits = (function () {
       return Array.isArray(raw) ? raw : null;
     } catch (err) { return null; }
   }
+  var caseSaveTimer = 0;
   function saveCases() {
     if(window.CRestoringData)return true;
     try { localStorage.setItem(CASE_KEY,JSON.stringify(state.cases));return true; }
     catch(e){toast('卦例尚未写入本机，请导出数据后释放空间');return false;}
   }
+  function loadCasesFromStore(cb) {
+    if (!window.CCaseStore) { cb(null); return; }
+    CCaseStore.loadAll().then(function (rows) {
+      CCaseStore.markReady();
+      cb(Array.isArray(rows) ? rows : []);
+    }).catch(function () { CCaseStore.markFailed(); cb(null); });
+  }
+
   function ctxFromDate(d) {
     var a = computeAstro(d);
     return {
@@ -10114,7 +10500,28 @@ window.CBookEdits = (function () {
       }).concat(migrated);
     }
     state.casesLoaded = true;
-    saveCases();
+    loadCasesFromStore(function (rows) {
+      if (rows && rows.length) {
+        state.cases = rows;
+        updateCaseTotals(); renderCaseList();
+        if (state.caseOpenId) {
+          var cur = state.cases.filter(function (c) { return c.id === state.caseOpenId; })[0];
+          if (cur) renderCaseDetail(cur);
+        }
+        return;
+      }
+      var legacy = loadCasesRaw();
+      if (legacy && legacy.length) {
+        state.cases = legacy;
+        CCaseStore.saveAll(legacy).then(function () {
+          CCaseStore.markReady();
+          try { localStorage.removeItem(CASE_KEY); } catch (e) {}
+          updateCaseTotals(); renderCaseList();
+        }).catch(function () { CCaseStore.markFailed(); saveCases(); });
+      } else {
+        saveCases();
+      }
+    });
   }
   function addCase(caseObj) {
     var next=[caseObj].concat(state.cases);
@@ -10194,15 +10601,70 @@ window.CBookEdits = (function () {
     return '<span class="case-card-hexmini" aria-hidden="true">' + out + '</span>';
   }
 
+  var CASE_OUTCOMES = ['待验证', '应验', '部分应验', '未应验'];
+  function structuredBlockHTML(c) {
+    if (!c) return '';
+    var has = c.background || c.judgment || c.verifyPlan || c.outcome || (c.tags && c.tags.length);
+    if (!has) return '';
+    var parts = ['<section class="case-structured">'];
+    parts.push('<h3>结构化记录</h3>');
+    if (c.outcome) parts.push('<p><b>结果：</b>' + esc(c.outcome) + '</p>');
+    if (c.background) parts.push('<p><b>背景：</b>' + esc(c.background) + '</p>');
+    if (c.judgment) parts.push('<p><b>当时判断：</b>' + esc(c.judgment) + '</p>');
+    if (c.verifyPlan) parts.push('<p><b>验证点：</b>' + esc(c.verifyPlan) + '</p>');
+    if (c.tags && c.tags.length) parts.push('<p><b>标签：</b>' + c.tags.map(function (t) { return '<span class="pill">' + esc(t) + '</span>'; }).join(' ') + '</p>');
+    parts.push('</section>');
+    return parts.join('');
+  }
+  function editCaseStructured(c) {
+    var outcomes = CASE_OUTCOMES.map(function (o) { return '<option' + (o === (c.outcome || '待验证') ? ' selected' : '') + '>' + o + '</option>'; }).join('');
+    var html = '<label for="csBackground">占事背景</label><textarea id="csBackground" rows="2">' + esc(c.background || '') + '</textarea>' +
+      '<label for="csJudgment">当时判断（先写判断再验）</label><textarea id="csJudgment" rows="3">' + esc(c.judgment || '') + '</textarea>' +
+      '<label for="csVerify">验证点（怎么算应/不应）</label><textarea id="csVerify" rows="2">' + esc(c.verifyPlan || '') + '</textarea>' +
+      '<label for="csOutcome">结果</label><select id="csOutcome">' + outcomes + '</select>' +
+      '<label for="csTags">标签（逗号分隔）</label><input id="csTags" value="' + esc((c.tags || []).join('，')) + '">';
+    var d = CUI.dialog('结构化记录', html, [{ value: 'cancel', label: '取消' }, { value: 'save', label: '保存', primary: true }]);
+    d.result.then(function (res) {
+      if (res.value !== 'save' || !res.form) return;
+      var next = Object.assign({}, c, {
+        background: res.form.querySelector('#csBackground').value.trim(),
+        judgment: res.form.querySelector('#csJudgment').value.trim(),
+        verifyPlan: res.form.querySelector('#csVerify').value.trim(),
+        outcome: res.form.querySelector('#csOutcome').value,
+        tags: res.form.querySelector('#csTags').value.split(/[,，]/).map(function (x) { return x.trim(); }).filter(Boolean)
+      });
+      if (updateCaseRecord(next)) toast('结构化记录已保存');
+    });
+  }
+  function exportCaseJson(c) {
+    var data = {
+      q: c.q, cat: c.cat, gender: c.gender || '', date: c.date, astro: c.astro || null,
+      hex: c.hex, change: c.change || '', palace: c.palace || '', shiText: c.shiText || '', moveText: c.moveText || '',
+      lines: c.lines || null, chartRows: c.chartRows || null, bianRows: c.bianRows || null,
+      yongShen: c.yongShen || null,
+      background: c.background || '', judgment: c.judgment || '', verifyPlan: c.verifyPlan || '',
+      outcome: c.outcome || '', tags: c.tags || [],
+      jingguo: c.jingguo || '', result: c.result || '', reviewNote: c.reviewNote || '',
+      castMode: c.castMode || '', astroRule: c.astroRule || '', astroOpts: c.astroOpts || null
+    };
+    var blob = new Blob([JSON.stringify(data, null, 2)], { type: 'application/json;charset=utf-8' });
+    var url = URL.createObjectURL(blob);
+    var a = document.createElement('a');
+    a.href = url; a.download = '卦例-' + (c.date || '').replace(/[^0-9]/g, '').slice(0, 12) + '.json';
+    document.body.appendChild(a); a.click(); a.remove();
+    setTimeout(function () { URL.revokeObjectURL(url); }, 1000);
+    toast('已导出结构化 JSON');
+  }
+
   function caseMatchesQuery(c, q) {
-    var hay = [c.q, c.cat, c.hex, c.change, c.moveText, c.jingguo, c.result, c.reviewNote, c.note, c.date, c.yongShen ? c.yongShen.role : ''].join(' ').toLowerCase();
+    var hay = [c.q, c.cat, c.hex, c.change, c.moveText, c.jingguo, c.result, c.reviewNote, c.note, c.date, c.background, c.judgment, c.verifyPlan, c.outcome, (c.tags || []).join(' '), c.yongShen ? c.yongShen.role : ''].join(' ').toLowerCase();
     return hay.indexOf(q) >= 0;
   }
   function updateCaseRecord(next) {
     var list = state.cases.map(function (c) { return c.id === next.id ? next : c; });
     var prev = state.cases;
     state.cases = list;
-    try { localStorage.setItem(CASE_KEY, JSON.stringify(list)); } catch (e) { state.cases = prev; toast('卦例未能保存，请先导出数据'); return false; }
+    saveCases();
     updateCaseTotals(); renderCaseList();
     if (state.caseOpenId === next.id) renderCaseDetail(next);
     return true;
@@ -10233,6 +10695,11 @@ window.CBookEdits = (function () {
     if (c.jingguo) { lines.push(''); lines.push('当时记录：' + c.jingguo); }
     if (c.result) { lines.push(''); lines.push('反馈：' + c.result); }
     if (c.reviewNote) { lines.push(''); lines.push('复盘：' + c.reviewNote); }
+    if (c.background) { lines.push(''); lines.push('背景：' + c.background); }
+    if (c.judgment) { lines.push('当时判断：' + c.judgment); }
+    if (c.verifyPlan) { lines.push('验证点：' + c.verifyPlan); }
+    if (c.outcome) { lines.push('结果：' + c.outcome); }
+    if (c.tags && c.tags.length) { lines.push('标签：' + c.tags.join('、')); }
     return lines.join('\n');
   }
   function exportCaseFile(c) {
@@ -10460,7 +10927,11 @@ window.CBookEdits = (function () {
     tags += '<span class="pill">' + esc(caseObj.source || '书房记录') + '</span>';
     var astro = caseObj.astro || {};
     var pillars = [astro.year, astro.month, astro.day, astro.hour].filter(Boolean).join(' ');
-    var meta4 = '<span>四柱 <b>' + esc(pillars || '—') + '</b></span>' +
+    var castLabel = caseObj.castMethod && caseObj.castMethod.label ? caseObj.castMethod.label : ({ program: '程序摇卦', pick: '选卦', manual: '逐爻录入' }[caseObj.castMode] || '未记录');
+    var rsLabel = caseObj.ruleset && caseObj.ruleset.preset && RULESET_PRESETS[caseObj.ruleset.preset] ? RULESET_PRESETS[caseObj.ruleset.preset].label : '古筮真诠 · 十三神煞';
+    var meta4 = '<span>起卦 <b>' + esc(castLabel) + '</b></span>' +
+      '<span>规则集 <b>' + esc(rsLabel) + '</b></span>' +
+      '<span>四柱 <b>' + esc(pillars || '—') + '</b></span>' +
       (caseObj.monthJian ? '<span>月建 <b>' + esc(caseObj.monthJian) + '</b> · 日辰 <b>' + esc(caseObj.dayPillar || '') + '</b> · 旬空 <b>' + esc(caseObj.xunkong || '') + '</b></span>' : '') +
       (caseObj.yongShen ? '<span>用神 <b>' + esc(caseObj.yongShen.role + ' · ' + ['', '初', '二', '三', '四', '五', '上'][caseObj.yongShen.pos] + '爻') + '</b></span>' : '');
     var bianRows = caseBianRows(caseObj);
@@ -10473,6 +10944,8 @@ window.CBookEdits = (function () {
           '<button class="btn btn-ghost btn-sm" data-case-edit>编辑</button>' +
           '<button class="btn btn-ghost btn-sm" data-case-export>导出</button>' +
           '<button class="btn btn-ghost btn-sm" data-case-recast>再占</button>' +
+          '<button class="btn btn-ghost btn-sm" data-case-structured>结构化</button>' +
+          '<button class="btn btn-ghost btn-sm" data-case-json>导出 JSON</button>' +
         '</div>' +
       '</div>' +
       '<header class="detail-head">' +
@@ -10487,6 +10960,7 @@ window.CBookEdits = (function () {
           '<span>动爻 <b>' + esc(caseObj.moveText || '静卦') + '</b></span>' +
         '</div>' +
       '</header>' +
+      structuredBlockHTML(caseObj) +
       '<div class="result-editor" id="resultEditor" hidden>' +
         '<label class="field-label" for="resultText">补记结果 <span class="req">必填</span></label>' +
         '<textarea id="resultText" placeholder="记录实际结果与回访结论；只写事实，不写吉凶判断。">' + esc(caseObj.result || '') + '</textarea>' +
@@ -10593,8 +11067,8 @@ window.CBookEdits = (function () {
     var done = function () {
       btn.disabled = false;
       btn.textContent = original;
-      if (status) status.textContent = '已是最新版本 v0.5.3 · 今天 ' + hhmm() + ' 检查';
-      toast('已是最新版本 v0.5.3');
+      if (status) status.textContent = '已是最新版本 v0.6.0 · 今天 ' + hhmm() + ' 检查';
+      toast('已是最新版本 v0.6.0');
     };
     if (still()) done();
     else setTimeout(done, 900);
@@ -11067,21 +11541,278 @@ window.CBookEdits = (function () {
     if (!card) {
       card = document.createElement('section');
       card.id = 'cStorageCard'; card.className = 'panel set-block';
-      card.innerHTML = '<div class="set-head"><h2>本机存储</h2><p>卦例与笔记都存在这台电脑</p></div><p class="c-storage-text" id="cStorageText"></p>';
-      view.appendChild(card);
+      card.innerHTML = '<div class="set-head"><h2>本机存储</h2><p>卦例存在 IndexedDB，配置存在小容量 localStorage</p></div><p class="c-storage-text" id="cStorageText"></p>';
+      (view.querySelectorAll('.set-col')[1] || view).appendChild(card);
     }
     var bytes = storageBytes();
     var mb = bytes / 1048576;
     var quota = 5 * 1048576;
     var pct = Math.min(100, Math.round(bytes / quota * 100));
-    var text = '已用约 ' + mb.toFixed(2) + ' MB（约 ' + pct + '% / 5 MB）。';
-    if (pct >= 70) text += ' 接近上限，建议先「导出数据」备份，再清理不需要的旧卦例。';
-    else text += ' 可随时在「备份」里导出数据。';
-    var el = $('#cStorageText'); if (el) el.textContent = text;
-    card.classList.toggle('is-warn', pct >= 70);
+    function paint(cases) {
+      var el = $('#cStorageText'); if (!el) return;
+      var text = '卦例 ' + cases + ' 条（IndexedDB，不受 5MB 限制）· 本机配置约 ' + mb.toFixed(2) + ' MB（' + pct + '% / 5 MB）。';
+      if (pct >= 70) text += ' 配置接近上限，建议导出加密备份后清理旧数据。';
+      else text += ' 备份可在「数据与备份」里导出（支持密码加密）。';
+      el.textContent = text;
+      card.classList.toggle('is-warn', pct >= 70);
+    }
+    if (window.CCaseStore) {
+      CCaseStore.count().then(function (n) { paint(n); }).catch(function () { paint((state.cases || []).length); });
+    } else {
+      paint((state.cases || []).length);
+    }
   }
 
   window.CRenderStorageUsage = function () { try { renderStorageUsage(); } catch (e) {} };
+
+  /* ===== P1 学习闭环：测验 / 错题 / 复述 ===== */
+  var PR_KEY = 'liuyao-c-practice-v1';
+  function practiceLoad() {
+    try { return JSON.parse(localStorage.getItem(PR_KEY) || 'null') || { stats: {}, wrong: {}, recites: [] }; }
+    catch (e) { return { stats: {}, wrong: {}, recites: [] }; }
+  }
+  function practiceSave(data) { try { localStorage.setItem(PR_KEY, JSON.stringify(data)); } catch (e) {} }
+  function practiceHexes() {
+    var out = [];
+    (typeof HEX_LIST !== 'undefined' ? HEX_LIST : []).forEach(function (name) {
+      var bits = NAME_TO_BITS[name]; if (!bits) return;
+      var info;
+      try { info = ENGINE.getHexagramInfo(hexLines(bits)); } catch (e) { return; }
+      out.push({ name: name, bits: bits, palace: PALACE_CN[info.palaceName] || info.palaceName, shi: info.shiIndex + 1 });
+    });
+    return out;
+  }
+  function practiceNajia(h) {
+    var d = new Date(2026, 0, 1, 10, 0);
+    var a = computeAstro(d, { ziMode: '23', trueSolar: false });
+    try { return ENGINE.getNaJiaData({ lines: hexLines(h.bits) }, d, String(a.dayPlain || '').charAt(0)); } catch (e) { return []; }
+  }
+  function practiceWrongId(q) { return q.type + ':' + q.prompt; }
+  function practiceMakeQuiz(n) {
+    var hexes = practiceHexes();
+    if (hexes.length < 8) return [];
+    var pools = { palace: [], shi: [], liuqin: [], liuchong: [] };
+    hexes.forEach(function (h) { pools.palace.push(h.palace); pools.shi.push(h.shi); });
+    var kinAll = ['父母', '兄弟', '子孙', '妻财', '官鬼'];
+    var qs = [];
+    function pick(arr) { return arr[Math.floor(Math.random() * arr.length)]; }
+    function options(correct, pool, count) {
+      var set = [correct];
+      var guard = 0;
+      while (set.length < count && guard++ < 80) { var v = pick(pool); if (set.indexOf(v) < 0) set.push(v); }
+      for (var i = set.length - 1; i > 0; i--) { var j = Math.floor(Math.random() * (i + 1)); var t = set[i]; set[i] = set[j]; set[j] = t; }
+      return set;
+    }
+    var used = {};
+    for (var i = 0; i < n * 4 && qs.length < n; i++) {
+      var h = pick(hexes);
+      var type = pick(['palace', 'shi', 'liuqin', 'liuchong']);
+      var key = type + h.name;
+      if (used[key]) continue;
+      used[key] = 1;
+      if (type === 'palace') {
+        var opts = options(h.palace, pools.palace.length >= 5 ? pools.palace : ['乾宫', '兑宫', '离宫', '震宫', '坎宫', '艮宫', '坤宫', '巽宫'], 4);
+        qs.push({ type: type, prompt: '「' + h.name + '」属于哪一宫？', options: opts, answer: opts.indexOf(h.palace), explain: h.name + ' 属 ' + h.palace + '（世在' + CN[h.shi] + '爻）。' });
+      } else if (type === 'shi') {
+        var optS = options(h.shi, [1, 2, 3, 4, 5, 6], 4).map(function (x) { return CN[x] + '爻'; });
+        qs.push({ type: type, prompt: '「' + h.name + '」的世爻在第几爻？', options: optS, answer: optS.indexOf(CN[h.shi] + '爻'), explain: h.name + ' 世在' + CN[h.shi] + '爻（' + h.palace + '）。' });
+      } else if (type === 'liuqin') {
+        var najia = practiceNajia(h);
+        if (!najia.length) continue;
+        var pos = 1 + Math.floor(Math.random() * 6);
+        var row = najia[pos - 1];
+        if (!row || !row.liuQin) continue;
+        var optK = options(row.liuQin, kinAll, 4);
+        qs.push({ type: type, prompt: '「' + h.name + '」' + CN[pos] + '爻的六亲是？', options: optK, answer: optK.indexOf(row.liuQin), explain: CN[pos] + '爻 ' + row.liuQin + ' ' + row.stem + row.branch + '。' });
+      } else {
+        var nj = practiceNajia(h);
+        if (!nj.length) continue;
+        var branches = nj.map(function (r) { return r.branch; });
+        var chong = branches.length === 6 && learnPair(branches[0], branches[3], LEARN_LIUCHONG) && learnPair(branches[1], branches[4], LEARN_LIUCHONG) && learnPair(branches[2], branches[5], LEARN_LIUCHONG);
+        var he = branches.length === 6 && learnPair(branches[0], branches[3], LEARN_LIUHE) && learnPair(branches[1], branches[4], LEARN_LIUHE) && learnPair(branches[2], branches[5], LEARN_LIUHE);
+        var ans = chong ? '六冲卦' : (he ? '六合卦' : '既非六冲也非六合');
+        var optL = options(ans, ['六冲卦', '六合卦', '既非六冲也非六合'], 3);
+        qs.push({ type: 'liuchong', prompt: '「' + h.name + '」的卦体关系是？', options: optL, answer: optL.indexOf(ans), explain: h.name + '：' + branches.join('、') + ' → ' + ans + '。' });
+      }
+    }
+    return qs.slice(0, n);
+  }
+  var practiceState = { quiz: [], idx: 0, correct: 0, mode: 'quiz', wrongSingle: null };
+  function practiceBody() { var d = document.querySelector('dialog[open]'); return d && d.querySelector('.c-dialog-body'); }
+  function practiceHubHTML() {
+    var data = practiceLoad();
+    var wrongN = Object.keys(data.wrong || {}).length;
+    var stats = data.stats || {};
+    return '<div class="practice-hub">' +
+      '<p class="c-muted">已答 ' + (stats.answered || 0) + ' 题 · 正确 ' + (stats.correct || 0) + ' · 错题 ' + wrongN + ' 条</p>' +
+      '<div class="practice-actions">' +
+      '<button type="button" class="btn btn-primary" data-pr="quiz">开始测验（10 题）</button>' +
+      '<button type="button" class="btn" data-pr="wrong">错题本（' + wrongN + '）</button>' +
+      '<button type="button" class="btn" data-pr="recite">复述练习</button>' +
+      '</div>' +
+      '<p class="c-muted" style="margin-top:10px;font-size:12px">题目由本卦盘自动生成：宫位、世爻、纳甲六亲、六合六冲；错题会记住，复述按关键词覆盖给分。</p>' +
+      '</div>';
+  }
+  function practiceShowHub() {
+    practiceState.mode = 'hub';
+    var body = practiceBody(); if (!body) return;
+    body.innerHTML = practiceHubHTML();
+  }
+  function practiceStartQuiz(items) {
+    practiceState.quiz = items || practiceMakeQuiz(10);
+    practiceState.idx = 0; practiceState.correct = 0; practiceState.mode = 'quiz';
+    practiceRenderQuestion();
+  }
+  function practiceRenderQuestion() {
+    var body = practiceBody(); if (!body) return;
+    var q = practiceState.quiz[practiceState.idx];
+    if (!q) { practiceFinish(); return; }
+    body.innerHTML = '<div class="practice-quiz"><p class="practice-progress">第 ' + (practiceState.idx + 1) + ' / ' + practiceState.quiz.length + ' 题</p>' +
+      '<h3 class="practice-q">' + esc(q.prompt) + '</h3>' +
+      '<div class="practice-options">' + q.options.map(function (o, i) {
+        return '<button type="button" class="practice-opt" data-pr-opt="' + i + '">' + esc(o) + '</button>';
+      }).join('') + '</div><div class="practice-feedback" id="practiceFeedback"></div></div>';
+  }
+  function practiceAnswer(i) {
+    var body = practiceBody(); if (!body) return;
+    var q = practiceState.quiz[practiceState.idx]; if (!q || body.dataset.answered) return;
+    body.dataset.answered = '1';
+    var data = practiceLoad();
+    data.stats = data.stats || { answered: 0, correct: 0 };
+    data.stats.answered = (data.stats.answered || 0) + 1;
+    var ok = i === q.answer;
+    if (ok) { practiceState.correct++; data.stats.correct = (data.stats.correct || 0) + 1; delete (data.wrong || {})[practiceWrongId(q)]; }
+    else {
+      data.wrong = data.wrong || {};
+      data.wrong[practiceWrongId(q)] = Object.assign({ at: Date.now() }, q);
+    }
+    practiceSave(data);
+    body.querySelectorAll('.practice-opt').forEach(function (b, idx) {
+      b.classList.toggle('is-correct', idx === q.answer);
+      b.classList.toggle('is-wrong', idx === i && !ok);
+      b.disabled = true;
+    });
+    var fb = document.getElementById('practiceFeedback');
+    if (fb) {
+      fb.innerHTML = '<p class="' + (ok ? 'ok' : 'bad') + '">' + (ok ? '正确。' : '不对。正确答案：' + esc(q.options[q.answer])) + '</p>' +
+        '<p class="c-muted">' + esc(q.explain || '') + '</p>' +
+        '<button type="button" class="btn btn-primary btn-sm" data-pr-next>下一题</button>';
+    }
+  }
+  function practiceFinish() {
+    var body = practiceBody(); if (!body) return;
+    var total = practiceState.quiz.length;
+    body.innerHTML = '<div class="practice-quiz"><h3 class="practice-q">本组完成</h3>' +
+      '<p>答对 ' + practiceState.correct + ' / ' + total + '。</p>' +
+      '<p class="c-muted">错题已存入错题本' + (practiceState.mode === 'wrong' ? '；答对的会从错题本移除。' : '。') + '</p>' +
+      '<div class="practice-actions"><button type="button" class="btn btn-primary" data-pr="quiz">再来一组</button>' +
+      '<button type="button" class="btn" data-pr="wrong">看错题本</button>' +
+      '<button type="button" class="btn" data-pr="hub">返回</button></div></div>';
+  }
+  function practiceShowWrong() {
+    var body = practiceBody(); if (!body) return;
+    var data = practiceLoad();
+    var items = Object.keys(data.wrong || {}).map(function (k) { return data.wrong[k]; });
+    practiceState.mode = 'wrong';
+    body.innerHTML = '<div class="practice-wrong"><h3 class="practice-q">错题本</h3>' +
+      (items.length ? '<div class="practice-wrong-list">' + items.map(function (q, i) {
+        return '<div class="practice-wrong-item"><p>' + esc(q.prompt) + '</p><p class="c-muted">答案：' + esc(q.options[q.answer]) + '</p></div>';
+      }).join('') + '</div><div class="practice-actions"><button type="button" class="btn btn-primary" data-pr="redoWrong">重做全部错题</button>' +
+        '<button type="button" class="btn" data-pr="clearWrong">清空错题本</button><button type="button" class="btn" data-pr="hub">返回</button></div>'
+        : '<p class="c-muted">还没有错题。</p><div class="practice-actions"><button type="button" class="btn btn-primary" data-pr="quiz">先做一组</button><button type="button" class="btn" data-pr="hub">返回</button></div>') +
+      '</div>';
+  }
+  function practiceReciteSource() {
+    var books = booksText(); var keys = Object.keys(books);
+    if (keys.length) {
+      var best = keys[0];
+      keys.forEach(function (k) { if (String(books[k] || '').length > String(books[best] || '').length) best = k; });
+      var text = String(books[best] || '');
+      var chunks = text.split(/\n+/).filter(function (x) {
+        var t = x.trim();
+        if (t.length < 60 || t.length > 300) return false;
+        if ((t.match(/[\u4e00-\u9fa5]\s/g) || []).length > 5) return false; /* 排除索引式单字间隔 */
+        return /[，。；：]/.test(t);
+      });
+      var chunk = chunks.length ? chunks[Math.floor(Math.random() * chunks.length)] : text.slice(0, 240);
+      return { book: best, text: chunk.slice(0, 260) };
+    }
+    return { book: '示例', text: '易与天地准，故能弥纶天地之道。仰以观于天文，俯以察于地理，是故知幽明之故。' };
+  }
+  function practiceReciteScore(original, user) {
+    var terms = {};
+    var clean = String(original).replace(/[，。、；：！？,.;:!?\s]/g, '');
+    var userClean = String(user).replace(/[，。、；：！？,.;:!?\s]/g, '');
+    for (var i = 0; i + 1 < clean.length; i++) { var t = clean.slice(i, i + 2); terms[t] = 1; }
+    var keys = Object.keys(terms);
+    var hit = keys.filter(function (t) { return userClean.indexOf(t) >= 0; }).length;
+    return { coverage: keys.length ? Math.round(hit / keys.length * 100) : 0, hit: hit, total: keys.length };
+  }
+  function practiceShowRecite() {
+    var body = practiceBody(); if (!body) return;
+    var src = practiceReciteSource();
+    practiceState.mode = 'recite'; practiceState.recite = src;
+    body.innerHTML = '<div class="practice-recite"><h3 class="practice-q">复述练习 · ' + esc(src.book) + '</h3>' +
+      '<p class="c-muted">先读一遍原文，然后合上默写；按两字词覆盖给分。</p>' +
+      '<blockquote class="practice-origin">' + esc(src.text) + '</blockquote>' +
+      '<label for="practiceReciteInput">你的复述</label><textarea id="practiceReciteInput" rows="5"></textarea>' +
+      '<div class="practice-actions"><button type="button" class="btn btn-primary" data-pr="reciteCheck">提交比对</button>' +
+      '<button type="button" class="btn" data-pr="recite">换一段</button><button type="button" class="btn" data-pr="hub">返回</button></div>' +
+      '<div id="practiceReciteResult"></div></div>';
+  }
+  function practiceReciteCheck() {
+    var src = practiceState.recite || practiceReciteSource();
+    var user = (document.querySelector('#practiceReciteInput') || {}).value || '';
+    if (!user.trim()) { toast('先写一段再提交'); return; }
+    var score = practiceReciteScore(src.text, user);
+    var data = practiceLoad();
+    data.recites = (data.recites || []).concat([{ at: Date.now(), book: src.book, coverage: score.coverage, hit: score.hit, total: score.total }]).slice(-50);
+    practiceSave(data);
+    var box = document.querySelector('#practiceReciteResult');
+    if (box) box.innerHTML = '<p class="practice-score">覆盖 ' + score.coverage + '%（' + score.hit + ' / ' + score.total + ' 个两字词）</p>' +
+      '<p class="c-muted">原文：' + esc(src.text) + '</p>';
+  }
+  window.CPractice = {
+    makeQuiz: practiceMakeQuiz, load: practiceLoad, save: practiceSave,
+    current: function () { return { q: practiceState.quiz[practiceState.idx] || null, idx: practiceState.idx, mode: practiceState.mode }; },
+    start: function (n) { practiceStartQuiz(null); },
+    hub: function () {
+      CUI.dialog('练习与错题', practiceHubHTML(), [{ value: 'close', label: '关闭' }]);
+      var dlg = document.querySelector('dialog[open]');
+      if (!dlg) return;
+      dlg.addEventListener('click', function (e) {
+        var opt = e.target.closest('[data-pr-opt]');
+        if (opt) { practiceAnswer(Number(opt.dataset.prOpt)); return; }
+        if (e.target.closest('[data-pr-next]')) {
+          practiceState.idx++;
+          var body = practiceBody(); if (body) delete body.dataset.answered;
+          if (practiceState.idx >= practiceState.quiz.length) practiceFinish(); else practiceRenderQuestion();
+          return;
+        }
+        var btn = e.target.closest('[data-pr]');
+        if (!btn) return;
+        var act = btn.dataset.pr;
+        if (act === 'quiz') practiceStartQuiz(null);
+        else if (act === 'wrong') practiceShowWrong();
+        else if (act === 'recite') practiceShowRecite();
+        else if (act === 'hub') practiceShowHub();
+        else if (act === 'reciteCheck') practiceReciteCheck();
+        else if (act === 'redoWrong') { var w = Object.keys(practiceLoad().wrong || {}).map(function (k) { return practiceLoad().wrong[k]; }); if (w.length) practiceStartQuiz(w); }
+        else if (act === 'clearWrong') { var dd = practiceLoad(); dd.wrong = {}; practiceSave(dd); practiceShowWrong(); }
+      });
+    }
+  };
+  function setupPractice() {
+    var view = $('#view-study'); if (!view || document.querySelector('#practiceOpen')) return;
+    var host = view.querySelector('.view-head-side') || view.querySelector('.view-head');
+    if (!host) return;
+    var b = document.createElement('button');
+    b.type = 'button'; b.id = 'practiceOpen'; b.className = 'btn btn-sm';
+    b.textContent = '练习'; b.title = '测验 / 错题 / 复述';
+    b.addEventListener('click', function () { window.CPractice.hub(); });
+    host.appendChild(b);
+  }
+  window.CPracticeSetup = setupPractice;
 
   function init() {
     bindAll();
@@ -11094,6 +11825,8 @@ window.CBookEdits = (function () {
     initAstroTopbar();
     initCases();
     bindCaseQuery();
+    try { mountRulesetCard(); } catch (e) {}
+    try { setupPractice(); } catch (e) {}
     refreshReadingFlags();
     renderHomePanels();
     if (window.__whenData) {
@@ -11188,8 +11921,8 @@ window.CBookEdits = (function () {
       /* 2. 历法与校验（0.5.3 口径） */
       var a1 = computeAstro(new Date(2026, 1, 4, 12, 0));
       st('立春后年柱丙午/月柱庚寅', a1.year === '丙午年' && a1.month === '庚寅月', a1.year + ' ' + a1.month);
-      var a2 = computeAstro(new Date(2026, 10, 23, 23, 0));
-      var a3 = computeAstro(new Date(2026, 10, 23, 22, 59));
+      var a2 = computeAstro(new Date(2026, 10, 23, 23, 0), { ziMode: '23', trueSolar: false });
+      var a3 = computeAstro(new Date(2026, 10, 23, 22, 59), { ziMode: '23', trueSolar: false });
       st('23:00 子时换日', a3.day === '辛丑日' && a2.day === '壬寅日', a3.day + ' → ' + a2.day);
       st('非法干支被拒', !validGanzhi('甲丑') && validGanzhi('庚寅'));
       st('五虎遁推导', expectedMonthGanzhi('丙午年', '寅') === '庚寅', String(expectedMonthGanzhi ? expectedMonthGanzhi('丙午年', '寅') : 'no-fn'));
@@ -11247,7 +11980,7 @@ window.CBookEdits = (function () {
       switchCastMode('program');
       resetCast(false);
       runDemoCast();
-      st('分类默认请选择', ($('#castCategory').value || '') === '');
+      st('分类默认请选择', !!document.querySelector('#castCategory option[value=""]'));
       $('#saveCase').click();
       st('存入弹层打开', !!$('#saveModal') && $('#saveModal').classList.contains('is-on'));
       $('#castQuestion').value = '自检：0.5.3 联调';
@@ -11292,6 +12025,43 @@ window.CBookEdits = (function () {
     } catch (err) {
       st('自检异常', false, String(err));
     }
+    st('练习入口与题库', !!document.querySelector('#practiceOpen') && typeof CPractice === 'object' && (function () {
+      var qs = CPractice.makeQuiz(3);
+      return qs.length >= 1 && qs.every(function (q) { return q.answer >= 0 && q.answer < q.options.length; });
+    })());
+    st('手机轻写入接口', typeof CMobileMerge === 'function' && typeof CCaseSummaries === 'function');
+    st('规则集与出处', typeof CRuleSet === 'object' && (function () {
+      var all = CRuleSet.get().enabled.length;
+      CRuleSet.set('jian', CRuleSet.presets.jian.stars);
+      var jian = CRuleSet.get().enabled.length;
+      CRuleSet.set('gushi', CRuleSet.all.slice());
+      return all === 13 && jian === 8;
+    })());
+    try {
+      var bfCount = 0;
+      document.querySelectorAll('.app *').forEach(function (el) {
+        var bf = getComputedStyle(el).backdropFilter || getComputedStyle(el).webkitBackdropFilter;
+        if (bf && bf !== 'none') bfCount++;
+      });
+      st('玻璃层预算 ≤5', bfCount <= 5, String(bfCount));
+      st('页面体积预算', document.documentElement.outerHTML.length < 1.6 * 1024 * 1024, Math.round(document.documentElement.outerHTML.length / 1024) + ' KB');
+    } catch (e) { st('性能审计异常', false, String(e)); }
+
+    /* P1：起卦方式 / 历法口径 / 结构化 */
+    try {
+      st('其它起卦法按钮', !!document.querySelector('#otherCastBtn'));
+      var p1t = CCastMethods ? CCastMethods.time(new Date(2026, 10, 27, 12, 0)) : null;
+      var p1n = CCastMethods ? CCastMethods.numbers(1, 2, 3) : null;
+      var p1e = CCastMethods ? CCastMethods.external('窗外三声鸟叫') : null;
+      st('时间/数字/外应生成六位卦', !!p1t && p1t.bits.length === 6 && p1n.bits.length === 6 && p1e.bits.length === 6 && p1t.moving >= 1 && p1e.moving <= 6);
+      var z23 = computeAstro(new Date(2026, 10, 27, 23, 30), { ziMode: '23', trueSolar: false });
+      var z00 = computeAstro(new Date(2026, 10, 27, 23, 30), { ziMode: '00', trueSolar: false });
+      var ts = computeAstro(new Date(2026, 10, 27, 12, 0), { trueSolar: true, longitude: 105, ziMode: '23' });
+      st('早晚子时与真太阳时', z23.day !== z00.day && !!ts.trueSolar && Math.abs(ts.trueSolar.offset + 60) < 20, z23.day + ' / ' + z00.day + ' / ' + (ts.trueSolar ? ts.trueSolar.offset : 'x'));
+      st('历法口径控件', !!document.querySelector('#castTrueSolar') && !!document.querySelector('#castLon') && !!document.querySelector('#castZiMode'));
+      st('结构化卦例入口', typeof editCaseStructured === 'function' && typeof exportCaseJson === 'function');
+    } catch (e) { st('P1 自检异常', false, String(e)); }
+
     var summary = 'SELFTEST ' + (fail ? 'FAIL' : 'PASS') + ' · ' + pass + ' pass / ' + fail + ' fail';
     var box = $('#selftest');
     if (box) box.textContent = summary + '\n' + results.join('\n');
@@ -11414,9 +12184,9 @@ window.CBookEdits = (function () {
         for (var key in pt) if (Object.prototype.hasOwnProperty.call(pt, key)) copy[key] = pt[key];
         return copy;
       });
-      try { localStorage.setItem(CASE_KEY, JSON.stringify(next)); }
-      catch (e) { throw new Error('写入本机存储失败，已保留原数据'); }
       state.cases = next;
+      await (window.CCaseStore ? CCaseStore.saveAll(next) : Promise.resolve());
+      try { localStorage.removeItem(CASE_KEY); } catch (e) {}
       updateCaseTotals();
       renderCaseList();
       try { localStorage.setItem('liuyao.astroRule', ASTRO_RULE); } catch (e) {}

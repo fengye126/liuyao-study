@@ -129,3 +129,77 @@ html[data-proposal="C"] .tb-ganzhi,html[data-proposal="C"] .home-reading .hr-met
 .c-lesson-tools>.c-lesson-more{display:none}
 @media (max-width:640px){ .c-lesson-tools>.c-lesson-more{display:inline-flex;margin-left:auto} }
 @media (max-width:640px){ .c-lesson-tools:not(.is-collapsed) .c-lesson-more{display:inline-flex} }
+
+/* 结构化卦例 */
+.case-structured{border:1px solid var(--line);border-radius:10px;padding:10px 12px;margin:10px 0;background:var(--surface)}
+.case-structured h3{font-size:12px;letter-spacing:.08em;color:var(--ink-2);margin:0 0 6px}
+.case-structured p{margin:3px 0;font-size:12.5px;line-height:1.75}
+.case-structured .pill{font-size:11px}
+
+/* P1：历法口径开关触控 + 阅读栏玻璃/分段宽度 */
+#castTrueSolar{position:absolute;width:0;height:0;opacity:0;pointer-events:none}
+label.c-check:has(#castTrueSolar){position:relative;padding-left:24px;min-height:44px;display:inline-flex;align-items:center;cursor:pointer}
+label.c-check:has(#castTrueSolar)::before{content:'';position:absolute;left:0;top:50%;transform:translateY(-50%);width:16px;height:16px;border:1px solid var(--line);border-radius:4px;background:var(--surface)}
+label.c-check:has(#castTrueSolar)::after{content:'✓';position:absolute;left:3px;top:calc(50% - 1px);transform:translateY(-50%);font-size:12px;color:var(--accent);opacity:0}
+label.c-check:has(#castTrueSolar input:checked)::after{opacity:1}
+#rv5Bar{backdrop-filter:none !important;-webkit-backdrop-filter:none !important}
+.rv5-seg button{min-width:44px !important}
+
+/* 学习闭环：练习/测验/错题/复述 */
+.practice-hub,.practice-quiz,.practice-wrong,.practice-recite{max-width:min(680px,84vw)}
+.practice-actions{display:flex;gap:10px;flex-wrap:wrap;margin-top:12px}
+.practice-progress{font-size:12px;color:var(--ink-3);letter-spacing:.08em;margin:0 0 6px}
+.practice-q{font-size:16px;line-height:1.7;margin:0 0 12px}
+.practice-options{display:flex;flex-direction:column;gap:8px}
+.practice-opt{text-align:left;padding:10px 12px;border:1px solid var(--line);border-radius:8px;background:var(--surface);font:inherit;color:inherit;cursor:pointer}
+.practice-opt:hover{border-color:var(--accent)}
+.practice-opt.is-correct{border-color:#4f8f63;background:rgba(79,143,99,.12)}
+.practice-opt.is-wrong{border-color:#a63a2e;background:rgba(166,58,46,.1)}
+.practice-feedback{margin-top:12px;font-size:13px}
+.practice-feedback .ok{color:#3f7a52}.practice-feedback .bad{color:#a63a2e}
+.practice-wrong-list{display:flex;flex-direction:column;gap:8px;max-height:50vh;overflow:auto}
+.practice-wrong-item{border:1px solid var(--line);border-radius:8px;padding:8px 10px;background:var(--surface)}
+.practice-wrong-item p{margin:2px 0;font-size:13px}
+.practice-origin{border-left:3px solid var(--accent-soft);padding:8px 12px;margin:8px 0;background:var(--surface);font-size:13px;line-height:1.8}
+.practice-score{font-size:15px;margin:10px 0 4px;color:var(--accent-strong)}
+#practiceReciteInput{width:100%;font:inherit;padding:8px 10px;border:1px solid var(--line);border-radius:8px;background:var(--surface);color:inherit}
+
+/* 规则集 */
+.ruleset-stars{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:6px 10px;margin:8px 0}
+.ruleset-item{min-height:32px;font-size:13px}
+.ruleset-source{font-size:12.5px;line-height:1.8;color:var(--ink-2);border-left:3px solid var(--accent-soft);padding-left:10px;margin:8px 0}
+@media (max-width:640px){ .ruleset-stars{grid-template-columns:repeat(2,minmax(0,1fr))} }
+
+/* 规则集复选框：隐藏原生框，整行可点 */
+.ruleset-item{position:relative;padding-left:24px;min-height:44px;display:flex;align-items:center}
+.ruleset-item input{position:absolute;width:0;height:0;opacity:0;pointer-events:none}
+.ruleset-item::before{content:'';position:absolute;left:0;top:50%;transform:translateY(-50%);width:16px;height:16px;border:1px solid var(--line);border-radius:4px;background:var(--surface)}
+.ruleset-item::after{content:'✓';position:absolute;left:3px;top:50%;transform:translateY(-54%);font-size:12px;color:var(--accent);opacity:0}
+.ruleset-item:has(input:checked)::after{opacity:1}
+
+/* P2 性能预算：backdrop-filter 只保留在导航/弹层，其余一律不用 */
+html[data-proposal="C"] .app *{backdrop-filter:none !important;-webkit-backdrop-filter:none !important}
+html[data-proposal="C"] .rail,html[data-proposal="C"] .topbar,
+html[data-proposal="C"] .cmdk-panel,html[data-proposal="C"] .c-dialog,
+html[data-proposal="C"] .toc-drawer{backdrop-filter:blur(8px) saturate(1.04) !important;-webkit-backdrop-filter:blur(8px) saturate(1.04) !important}
+/* 去掉玻璃后，卡片用不透明纸保持可读 */
+html[data-proposal="C"] .panel,html[data-proposal="C"] .set-block{background:var(--surface) !important}
+/* 首页卡片保留原有底色/描边，只是不再透背景 */
+html[data-proposal="C"] .home-reading,html[data-proposal="C"] .home-panel,
+html[data-proposal="C"] .home-cast-cta,html[data-proposal="C"] .almanac-card,
+html[data-proposal="C"] .case-card,html[data-proposal="C"] .book-open{backdrop-filter:none !important}
+
+/* 学习资产状态徽标 */
+.asset-badge{display:inline-flex;align-items:center;justify-content:center;margin-left:6px;padding:1px 6px;border-radius:999px;font-size:10.5px;line-height:1.6;color:#8a5a2b;background:#fbf0dd;border:1px solid #dcc49a;vertical-align:middle}
+.audio-item.is-missing-media .ai-title{color:#8a5a2b}
+.lesson-card.is-missing-media{border-color:#dcc49a}
+.bv6-cover .asset-badge{position:absolute;right:6px;top:6px;margin:0;z-index:2}
+
+/* 书中卦象表：保留空格、等宽显示，避免六亲纳甲挤成一团 */
+.spread-page p.book-tbl{white-space:pre-wrap;word-break:break-all;font-family:var(--font-song,serif);font-size:.62em;line-height:1.55;letter-spacing:0;text-indent:0;margin:.15em 0;padding-bottom:2px}
+.spread-page p.book-tbl::-webkit-scrollbar{height:3px}
+
+/* 卦画爻线：替代缺字的 ▅ */
+.spread-page .hx-line{display:inline-block;width:4.4ch;height:.42em;margin:0 .18ch;vertical-align:middle;background:currentColor;border-radius:1px}
+.spread-page .hx-line.hx-yin{background:linear-gradient(90deg,currentColor 0 41%,transparent 41% 59%,currentColor 59% 100%)}
+.spread-page p.book-tbl .hx-line{width:4.2ch}

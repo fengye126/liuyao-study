@@ -4,6 +4,9 @@ const fs = require('fs');
 const https = require('https');
 const QRCode = require('qrcode');
 const lan = require('./lan');
+const mediaLib = require('./media-library');
+const mobileInbox = require('./mobile-inbox');
+const pdfView = require('./pdf-view');
 
 const isDev = !app.isPackaged;
 const DATA_DIR = path.join(app.getPath('appData'), '六爻书房');
@@ -13,10 +16,11 @@ const DIRS = ['assets', 'assets/backgrounds', 'backups', 'logs'];
 const REPO = 'fengye126/liuyao-study';
 const RELEASES_API = 'https://api.github.com/repos/' + REPO + '/releases/latest';
 const UPDATE_CHECK_KEY = 'lastUpdateCheck';
-const DATA_FILES = ['books.js', 'media.js', 'lessons-manifest.js', 'library.js', 'almanac.js'];
+const DATA_FILES = ['books.js', 'media.js', 'media-index.js', 'lessons-manifest.js', 'library.js', 'almanac.js'];
 
 let mainWindow = null;
 let lanServer = null;
+let lanHandle = null;
 let lanPort = 0;
 
 function ensureDirs() {
@@ -144,6 +148,7 @@ const DATA_GLOBALS = {
   'books.js': 'window.BOOKS_TEXT',
   'library.js': 'window.LIUYAO_LIBRARY',
   'media.js': 'window.MEDIA',
+  'media-index.js': 'window.MEDIA_INDEX',
   'lessons-manifest.js': 'window.LESSONS',
   'almanac.js': 'window.ALMANAC'
 };
@@ -194,18 +199,43 @@ async function importData(win) {
 /* ---------- 局域网 ---------- */
 async function startLan() {
   if (lanServer) return;
-  const r = await lan.start({ renderer: RENDERER, userData: USER_DATA, dataDir: DATA_DIR, version: app.getVersion() });
+  const r = await lan.start({
+    renderer: RENDERER, userData: USER_DATA, dataDir: DATA_DIR, version: app.getVersion(),
+    logFile: path.join(DATA_DIR, 'logs', 'lan-audit.log')
+  });
   lanServer = r.server;
+  lanHandle = r;
+  try { r.setInboxHandler((item) => mobileInbox.append(DATA_DIR, item)); } catch (e) {}
   lanPort = r.port;
 }
 
 async function lanInfo() {
   await startLan();
   const ips = lan.lanIPs();
-  const url = 'http://' + (ips[0] || '127.0.0.1') + ':' + lanPort + '/';
+  const token = (lanHandle && lanHandle.token) || '';
+  const base = 'http://' + (ips[0] || '127.0.0.1') + ':' + lanPort + '/';
+  const url = token ? base + '?k=' + token : base;
   let qr = '';
   try { qr = await QRCode.toDataURL(url, { margin: 1, width: 240 }); } catch (e) { qr = ''; }
-  return { url, port: lanPort, qr, ips, imported: importedStatus() };
+  let failures = [];
+  try {
+    if (lanHandle && typeof lanHandle.audit === 'function') failures = lanHandle.audit().filter((a) => a.status >= 400).slice(-10);
+  } catch (e) {}
+  return {
+    url, port: lanPort, qr, ips,
+    pairCode: (lanHandle && lanHandle.pairCode) || '',
+    pairExpires: (lanHandle && lanHandle.pairExpires) || 0,
+    auditFailures: failures,
+    imported: importedStatus()
+  };
+}
+
+function lanRegenPair() {
+  if (!lanHandle || typeof lanHandle.regeneratePair !== 'function') return { pairCode: '', pairExpires: 0 };
+  return lanHandle.regeneratePair();
+}
+function lanAudit() {
+  try { return lanHandle && typeof lanHandle.audit === 'function' ? lanHandle.audit() : []; } catch (e) { return []; }
 }
 
 function createWindow() {
@@ -237,6 +267,52 @@ ipcMain.handle('app:checkUpdate', () => checkForUpdates({ silent: false }));
 ipcMain.handle('data:import', (e) => importData(BrowserWindow.fromWebContents(e.sender)));
 ipcMain.handle('data:status', () => importedStatus());
 ipcMain.handle('lan:info', () => lanInfo());
+ipcMain.handle('lan:regenPair', () => lanRegenPair());
+ipcMain.handle('lan:pushCases', (_e, list) => { try { lanHandle && lanHandle.setSnapshot(list); } catch (err) {} return true; });
+ipcMain.handle('mobile:list', () => mobileInbox.list(DATA_DIR));
+ipcMain.handle('mobile:ack', (_e, id) => mobileInbox.ack(DATA_DIR, String(id)));
+ipcMain.handle('lan:audit', () => lanAudit());
+ipcMain.on('media:rootSync', (e) => {
+  try { e.returnValue = mediaLib.loadConfig(DATA_DIR, RENDERER).root; } catch (err) { e.returnValue = ''; }
+});
+ipcMain.handle('media:info', () => mediaLib.info(DATA_DIR, RENDERER));
+ipcMain.handle('media:scan', () => mediaLib.info(DATA_DIR, RENDERER));
+ipcMain.handle('media:chooseRoot', async (e) => {
+  const win = BrowserWindow.fromWebContents(e.sender);
+  const r = await dialog.showOpenDialog(win, { title: '选择媒体库文件夹', properties: ['openDirectory', 'createDirectory'] });
+  if (r.canceled || !r.filePaths || !r.filePaths[0]) return mediaLib.info(DATA_DIR, RENDERER);
+  mediaLib.setRoot(DATA_DIR, r.filePaths[0]);
+  return mediaLib.info(DATA_DIR, RENDERER);
+});
+ipcMain.handle('media:revealRoot', () => {
+  const root = mediaLib.loadConfig(DATA_DIR, RENDERER).root;
+  return shell.openPath(root);
+});
+ipcMain.handle('pdf:openInApp', async (e, href) => {
+  const win = BrowserWindow.fromWebContents(e.sender);
+  const base = (() => { try { return path.basename(decodeURIComponent(String(href).replace(/^file:\/\/\//i, ''))); } catch (err) { return ''; } })();
+  const roots = readJson('pdf-paths.json', {}) || {};
+  let target = href;
+  /* 之前定位过的 PDF：优先用记住的路径 */
+  if (base && roots[base] && fs.existsSync(roots[base])) target = 'file:///' + roots[base];
+  try {
+    let r;
+    try { r = pdfView.openPdfWindow(target, BrowserWindow, { parent: win }); }
+    catch (err) {
+      if (!/不在本机/.test(err.message)) throw err;
+      /* 首次缺失：让用户定位（一次性记住） */
+      const sel = await dialog.showOpenDialog(win, { title: '定位 PDF 原文：' + (base || ''), properties: ['openFile'], filters: [{ name: 'PDF', extensions: ['pdf'] }] });
+      if (sel.canceled || !sel.filePaths || !sel.filePaths[0]) return { ok: false, error: err.message };
+      const chosen = sel.filePaths[0];
+      if (base) { roots[base] = chosen; writeJsonAtomic('pdf-paths.json', roots); }
+      r = pdfView.openPdfWindow('file:///' + chosen, BrowserWindow, { parent: win });
+    }
+    return { ok: !!r.ok, path: r.path, size: r.size };
+  } catch (err) {
+    dialog.showMessageBox({ type: 'info', title: 'PDF 应用内阅读', message: err.message });
+    return { ok: false, error: err.message };
+  }
+});
 ipcMain.handle('pdf:open', async (e, href) => {
   const file = String(href || '').replace(/^file:\/\/\//, '');
   if (!file || !fs.existsSync(file)) {
